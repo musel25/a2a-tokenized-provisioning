@@ -1,9 +1,3 @@
-# A2A Tokenized Provisioning — Execution, Visualization & Reevaluation Plan
-### Companion to `DESIGN.md`
-
-This document does three things you asked for: (A) a critical **reevaluation** of the decomposition with a go/no-go verdict, (B) a **visualization architecture** with a dashboard for every step, and (C) a **granular iteration plan** where each step says exactly what you build, what you test, and what you can see working.
-
----
 
 ## A. Reevaluation — is the decomposition good enough?
 
