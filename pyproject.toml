@@ -1,0 +1,22 @@
+[project]
+name = "a2a-provisioning"
+version = "0.0.0"
+description = "Agent-to-agent tokenized network-service provisioning (workspace root)"
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.uv.workspace]
+members = ["interfaces", "e2e"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.4",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["interfaces/tests", "e2e/tests"]
+
+[tool.ruff]
+line-length = 100
+src = ["interfaces/src", "e2e/src"]
