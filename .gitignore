@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+dist/
+*.egg-info/
+
+# Foundry (contracts/ arrives at M1.1; libs are git submodules)
+contracts/cache/
+contracts/out/
+
+# env / local
+.env
+e2e/runs/

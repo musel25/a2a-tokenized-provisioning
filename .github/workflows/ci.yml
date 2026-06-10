@@ -1,0 +1,34 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive # Foundry libs arrive as submodules (M1.2)
+      - uses: astral-sh/setup-uv@v8.2.0
+        with:
+          enable-cache: true
+      - run: uv sync --all-packages
+      - run: uv run pytest -v
+      - run: uv run ruff check .
+
+  contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - uses: foundry-rs/foundry-toolchain@v1
+      - name: forge test (skipped until contracts/ exists at M1.1)
+        run: |
+          if [ -f contracts/foundry.toml ]; then
+            cd contracts && forge test -vv
+          else
+            echo "contracts/ not yet created — arrives at M1.1"
+          fi
