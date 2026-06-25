@@ -116,7 +116,7 @@ Ticket (entitlement) #7
   owner     : Ada         (0xf39F…2266)
   type      : bandwidth   (serviceType 0)
   terms     : up to 50 Mbps · path resource 0xabc… · class 1
-  valid     : 14:00 → 16:00   (stored as unix seconds: 1781445600 → 1781452800)
+  valid     : 14:00 → 16:00   (stored as unix seconds: 1757944800 → 1757952000)
   revoked   : no
   terms doc : committed as hash 0x9f3e…   (chapter 8 explains)
 ```
@@ -190,8 +190,9 @@ That is the vending machine's clunk.
 **(c) The photocopier attack.** Why the serial number? A signature can be copied
 perfectly. Without the "mark it used" step, anyone holding Bell's signed offer could feed
 it to the machine a hundred times — and Bell, who signed capacity for *one* customer,
-would owe a hundred. So the contract keeps a ledger of punched serials: **every signed
-offer is single-use**.
+would owe a hundred. So the contract keeps a ledger of punched offers — keyed by the hash
+of the *whole* offer, with the serial there only to make each offer's hash unique: **every
+signed offer is single-use**.
 
 **(d) Two small honesty notes about money and printing.** Money: TOK uses 18 decimals —
 "10 TOK" is stored as `10000000000000000000`, because blockchains do exact integer math
@@ -214,7 +215,7 @@ Says who? Over a network, anyone can *claim* to be Ada. Two wrong answers first:
 
 - *Ada sends her private key as proof.* Never. The key **is** her identity; sending it is
   handing over her hand. Keys never travel — in this whole system, Ada's key lives inside
-  one component (`chain-mcp`) and nothing else ever sees it.
+  one component (`chainmcp`) and nothing else ever sees it.
 - *Ada sends a pre-signed note: "I, owner of #7, request activation."* Better — but that
   note crosses the network, and bytes get copied. Anyone who saw it can **replay** it
   tomorrow and puppeteer Ada's ticket.
@@ -224,7 +225,7 @@ never-before-used number (a **nonce**) with a short fuse. Ada signs a message bi
 everything together:
 
 ```
-a2a-activate|bw-ctrl-1|0x5f9c…|7|1781445900
+a2a-activate|bw-ctrl-1|0x5f9c…|7|1757945100
               ^controller  ^nonce  ^ticket  ^proof expiry
 ```
 
@@ -377,7 +378,7 @@ Eight packages, one job each — you've already met them all as characters:
 | Package | Story role | One-line job |
 |---|---|---|
 | `contracts` | the vending machine | money moves; tickets exist; nowhere else |
-| `chain-mcp` | Ada's & Bell's banking app | the only holder of keys; signs, pays, reads |
+| `chainmcp` | Ada's & Bell's banking app | the only holder of keys; signs, pays, reads |
 | `netlab` | the miniature internet | real router OS, fake cables |
 | `netctl` | the hands | speaks gNMI; knows no tickets |
 | `controller` | the bouncer + translator | the checklist; terms → config |

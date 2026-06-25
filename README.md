@@ -7,6 +7,10 @@ gNMI. Thesis: the settlement pattern is **service-agnostic** — two genuinely d
 services flow through identical settlement and authorization machinery, and only the
 last-mile translator differs.
 
+The running example: Ada (a consumer agent) buys 50 Mbps on path A→B from Bell (a provider
+agent) for 10 TOK; one atomic transaction mints entitlement **#7** to Ada, and a
+deterministic controller honors it by shaping the router — no human, no prior trust.
+
 ## Read first, in order
 
 1. [`docs/00-the-story.md`](docs/00-the-story.md) — every concept, introduced by the problem it solves

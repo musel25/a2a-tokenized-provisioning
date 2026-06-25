@@ -7,10 +7,10 @@ default:
 test:
     uv run pytest
 
-# lint
+# ruff lint (rules + line-length live in pyproject.toml)
 lint:
     uv run ruff check .
 
-# format
+# ruff auto-format (rewrites files in place)
 fmt:
     uv run ruff format .
