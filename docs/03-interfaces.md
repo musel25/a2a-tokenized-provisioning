@@ -19,6 +19,9 @@ deliberately carried in v0.
   **chain time** (`block.timestamp`) — see ADR-004. OS clocks only schedule wake-ups;
   every action re-verifies against chain time.
 - Every JSON payload carries `"v": 0`.
+- JSON field names are **snake_case**, with one deliberate exception: the `offer`
+  sub-object (§1.4) is **camelCase**, because it mirrors the Solidity EIP-712 struct
+  byte-for-byte (what is signed must equal what the contract verifies).
 - Error codes are one shared enum (§3.4), used by the controller API and surfaced by tools.
 - Payment: mock ERC-20 `TOK` (18 decimals) with a public `faucet()`. Single chain: Anvil,
   `chainId = 31337`.
@@ -100,24 +103,27 @@ form (JSON, keys sorted, no insignificant whitespace, UTF-8) hashes (keccak256) 
 {
   "v": 0,
   "offer": {
-    "provider":     "0xProviderAddr",
+    "provider":     "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
     "consumer":     "0x0000000000000000000000000000000000000000",
     "serviceType":  0,
-    "resourceId":   "0x...32bytes",
-    "params":       "0x...abi-encoded (schema per serviceType, §4.2)",
+    "resourceId":   "0x0000000000000000000000000000000000000000000000000000000000000007",
+    "params":       "0x..02faf080..01 — abi(capacityBps=50000000, qosClass=1), §4.2",
     "startTime":    1757944800,
     "endTime":      1757952000,
-    "paymentToken": "0xTokAddr",
+    "paymentToken": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
     "price":        "10000000000000000000",
     "validUntil":   1757946000,
-    "salt":         "0x...32bytes",
-    "termsHash":    "0x...32bytes"
+    "salt":         "0x0000000000000000000000000000000000000000000000000000000000005a17",
+    "termsHash":    "0x2222222222222222222222222222222222222222222222222222222222222222"
   },
   "signature": "0x...65bytes",
   "terms_doc": { "sla": { "latency_ms": 20, "loss_pct": 0.1 }, "notes": "best effort beyond rate" }
 }
 ```
 
+- These are the canonical fixture values (`a2a_interfaces.fixtures`): Bell `0x7099…79C8` is
+  the provider, `0x5FbD…0aa3` the token, ticket #7's `resourceId` is `0x…0007`, price 10 TOK.
+  Story and tests reuse them — change them in one place or not at all.
 - `consumer = address(0)` ⇒ **open offer** (anyone may fulfill before `validUntil`). v0 default.
 - `serviceType`: `0` = bandwidth, `1` = telemetry.
 - Windows are **absolute** in v0 (flip-point §7).
@@ -129,9 +135,27 @@ form (JSON, keys sorted, no insignificant whitespace, UTF-8) hashes (keccak256) 
 ### 2.1 EIP-712
 
 - Domain: `{ name: "A2AProvisioning", version: "0", chainId: 31337, verifyingContract: <settlement addr> }`
-- Typed struct `Offer` = the eleven fields of §1.4 `offer`, in that order.
+- Typed struct `Offer` = the twelve fields of §1.4 `offer`, in that order.
 
 ### 2.2 Functions (external surface)
+
+The record `entitlements(id)` returns — the Solidity twin of the Python `EntitlementView`
+(§4.1), holding only the **enforceable** fields (the descriptive SLA lives off-chain behind
+`termsHash`):
+
+```solidity
+struct Entitlement {
+    address issuer;        // the provider who signed the offer (e.g. Bell)
+    uint8   serviceType;   // 0 = bandwidth, 1 = telemetry
+    bytes32 resourceId;    // opaque handle; the controller maps it to topology (ADR-005)
+    bytes   params;        // abi-encoded per serviceType (§4.2)
+    uint64  startTime;
+    uint64  endTime;
+    bool    revoked;
+    bytes32 termsHash;     // keccak256 of the canonical terms_doc
+}
+// the entitlement id is the ERC-721 tokenId; the owner is the current holder (ownerOf).
+```
 
 ```solidity
 function fulfill(Offer calldata offer, bytes calldata signature) external returns (uint256 entitlementId);
@@ -161,7 +185,7 @@ polling/view calls at decision time.
 ## 3. Activation API — consumer agent ↔ controller (HTTP/JSON)
 
 Replay-safe binding of off-chain enforcement to on-chain ownership. The consumer's key
-never leaves `chain-mcp`; the controller only ever sees a signature.
+never leaves `chainmcp`; the controller only ever sees a signature.
 
 ### 3.1 Endpoints
 
@@ -223,8 +247,9 @@ class EntitlementReader(Protocol):
 ### 4.1 `EntitlementView`
 
 ```python
-@dataclass(frozen=True)
-class EntitlementView:
+# Implemented as a frozen pydantic model (a2a_interfaces.models); the port-side
+# shapes below are likewise frozen pydantic models, not stdlib dataclasses.
+class EntitlementView(BaseModel):  # frozen
     id: int
     issuer: str
     service_type: int            # 0 | 1
@@ -260,18 +285,15 @@ class NetworkProvisioner(Protocol):
     def teardown(self, session_id: str) -> ApplyResult: ...   # MUST be idempotent
     def health(self) -> bool: ...
 
-@dataclass(frozen=True)
-class ResolvedPath:
+class ResolvedPath(BaseModel):  # frozen
     device: str            # e.g. "srl1"
     ingress_if: str        # e.g. "ethernet-1/1"
     egress_if: str
 
-@dataclass(frozen=True)
-class ResolvedNode:
+class ResolvedNode(BaseModel):  # frozen
     device: str
 
-@dataclass(frozen=True)
-class ApplyResult:
+class ApplyResult(BaseModel):  # frozen
     ok: bool
     detail: str = ""
 ```
@@ -297,9 +319,9 @@ the agent path.
 ## 6. MCP tool schemas — agents ↔ tools
 
 Two MCP servers sit on the agent path. Key custody rule: **all private keys live in
-`chain-mcp`**; `ctrl-mcp` and the controller never hold or see a key.
+`chainmcp`**; `ctrl-mcp` and the controller never hold or see a key.
 
-### 6.1 `chain-mcp` (per-agent instance, configured with that agent's key)
+### 6.1 `chainmcp` (per-agent instance, configured with that agent's key)
 
 | Tool | Input | Output | Used by |
 |---|---|---|---|

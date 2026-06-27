@@ -3,7 +3,7 @@
 ### Project Design & Execution Plan
 
 
-**Stack**vLLM · LangGraph · MCP · A2A protocol · Foundry/Anvil · Containerlab + Nokia SR Linux · pygnmi/gNMI
+**Stack:** vLLM · LangGraph · MCP · A2A protocol · Foundry/Anvil · Containerlab + Nokia SR Linux · pygnmi/gNMI
 
 ## 1. Overview, thesis statement, scope
 
@@ -130,7 +130,7 @@ Both services share one settlement contract, distinguished by a `serviceType` di
 
 ### 4.1 Bandwidth-on-demand
 
-- **What is sold:** the right to up to *X* Mbps on path A→B, for window `[t0, t1]`, at QoS class *Q*. Guaranteed allocation (the provider runs admission control before signing an offer — it does not oversell).
+- **What is sold:** the right to up to *X* Mbps on path A→B, for window `[t0, t1]`, at QoS class *Q*. Guaranteed allocation (the provider runs admission control before signing an offer — it does not oversell). *Canonically:* Bell signs 50 Mbps on path A→B, 14:00–16:00, for 10 TOK; `fulfill` mints ticket #7 to Ada.
 - **Entitlement params:** `capacityBps`, `qosClass`, `pathResourceId`.
 - **Activation:** the consumer redeems the entitlement; the controller resolves `resourceId` → ports/links and programs a meter/shaper at `capacityBps` and the queue/DSCP for `qosClass` on SR Linux. Teardown at `t1`.
 
@@ -190,7 +190,7 @@ flowchart TD
     subgraph e2e["e2e — compose + lifecycle tests"]
         A["agents<br/>vLLM + LangGraph · 3 roles"]
         T["controller<br/>deterministic ACL"]
-        M["chain-mcp<br/>sign · swap · read · proof"]
+        M["chainmcp<br/>sign · swap · read · proof"]
         NC["netctl<br/>gNMI provisioning · MCP"]
         K["contracts<br/>Foundry · Anvil"]
         NL["netlab<br/>Containerlab · SR Linux"]
@@ -218,7 +218,7 @@ The single most important application: the **controller's domain** (authorizatio
 | ---------------------- | ----------------------------------------------------------- |
 | Agent reasoning      | vLLM (local serve, small model e.g. Qwen3-4B) + LangGraph |
 | Agent-to-agent comms | A2A protocol (discovery, offer, accept)                   |
-| Tool access          | MCP servers (`chain-mcp`, network provisioning MCP)       |
+| Tool access          | MCP servers (`chainmcp`, network provisioning MCP)       |
 | Settlement           | Solidity + Foundry; Anvil local chain                     |
 | Payment              | Mock ERC-20 test token                                    |
 | Network substrate    | Containerlab + Nokia SR Linux                             |
@@ -307,7 +307,7 @@ The controller is the one place the **settlement model and the network model mee
 - **Serving:** vLLM hosts a small model locally; LangGraph orchestrates each role's reasoning as a graph.
 - **Roles:** consumer, bandwidth provider, telemetry provider. The consumer graph: discover → request offer → *decide* → settle → request activation. The provider graph: receive request → admission control → *select & sign offer* → (on activation) trigger deterministic enforcement.
 - **MCP tools the agents call:**
-  - `chain-mcp` — sign offer (provider), submit fulfill/swap (consumer), read entitlement, produce owner-proof.
+  - `chainmcp` — sign offer (provider), submit fulfill/swap (consumer), read entitlement, produce owner-proof.
   - network provisioning MCP (`netctl`) — provider-side, behind the deterministic controller.
 - **A2A protocol:** discovery (agent cards / a simple registry), offer request, fixed-price quote (the signed offer), accept/decide.
 - **Tool-call vs transaction:** a *tool call* is an agent invoking an MCP capability; a *transaction* is the on-chain state change (`fulfill`) that the tool call submits. The agent decides; the transaction is deterministic and atomic.
@@ -323,10 +323,10 @@ monorepo with strictly-bounded packages — same logical boundaries.
 | -------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------ | ------------------------------ | ------------------------------------------------------------------------- |
 | `netlab`     | Network substrate          | Containerlab topology + SR Linux; manual recipes for bandwidth QoS and telemetry subscriptions; spin-up/inspect docs         | —                                 | n/a                          | Topology spins up; both recipes work by hand; documented                |
 | `contracts`  | Settlement                 | Offer verify → mint-at-swap → entitlement store → revoke → on-chain tokenURI; Foundry tests; deploy script; exported ABI | —                                 | n/a (Anvil)                  | Foundry suite green incl. swap atomicity, single-use offers, revocation |
-| `chain-mcp`  | Settlement (agent API)     | MCP tools wrapping the contract; typed client; mock mode                                                                     | `contracts` ABI                    | mock chain                   | Tools work against Anvil; mock parity                                   |
+| `chainmcp`  | Settlement (agent API)     | MCP tools wrapping the contract; typed client; mock mode                                                                     | `contracts` ABI                    | mock chain                   | Tools work against Anvil; mock parity                                   |
 | `netctl`     | Programmatic provisioning  | pygnmi/gNMI lib:`apply_bandwidth`, `apply_telemetry`, `teardown`; MCP server; mock mode                                      | `netlab`                           | mock lab                     | Real config applied to lab; mock parity                                 |
 | `controller` | Provisioning control (ACL) | Pure domain (predicate + lifecycle) + translators + adapters + auth + watchers                                               | `contracts`, `netctl` (via ports)  | built against mocks of both  | Predicate + lifecycle unit-tested; wired to real adapters               |
-| `agents`     | Autonomy                   | vLLM serving; LangGraph graphs (3 roles); MCP clients; A2A                                                                   | `chain-mcp`, `controller`/`netctl` | mock tools                   | Each role runs against mock tools, then real                            |
+| `agents`     | Autonomy                   | vLLM serving; LangGraph graphs (3 roles); MCP clients; A2A                                                                   | `chainmcp`, `controller`/`netctl` | mock tools                   | Each role runs against mock tools, then real                            |
 | `e2e`        | Orchestration              | Compose (Anvil + contracts + netlab + controller + vLLM + agents); lifecycle integration tests; Streamlit dashboard          | all                                | progressive mock replacement | Full lifecycle green for both services                                  |
 | `interfaces` | Context map                | The cross-context schemas/ports (published language)                                                                         | —                                 | —                           | Sketched before adapters; versioned                                     |
 
@@ -345,14 +345,14 @@ Grounded in Farley's *Modern Software Engineering* (optimize for **learning** + 
 ### 11.2 How to work
 
 1. **Iteration 0 — walking skeleton.** The thinnest end-to-end slice through *every* context (discover → offer → swap → authorize → activate → teardown) with everything mocked, running in CI on day one. It does almost nothing real but proves the architecture holds together.
-2. **Then grow in thin vertical slices.** Pick one lifecycle phase, make it real end-to-end — swap its mock for the real adapter, grow the domain behind it — and keep the whole skeleton green. Real swap (contracts + chain-mcp) → real authorize/activate (controller) → real network config (netctl + netlab) → real agent decisions (agents).
+2. **Then grow in thin vertical slices.** Pick one lifecycle phase, make it real end-to-end — swap its mock for the real adapter, grow the domain behind it — and keep the whole skeleton green. Real swap (contracts + chainmcp) → real authorize/activate (controller) → real network config (netctl + netlab) → real agent decisions (agents).
 3. **TDD inside each module** — the test first drives cohesion and forces you to name the module's job before over-building. Foundry tests for the contract; unit tests for the predicate, lifecycle, translators.
 4. **CI from the first commit** — every push runs fast per-module unit tests + the walking-skeleton integration test. The moment something stops integrating, you hear it that day.
 5. **Empirical checkpoints** — run against real Anvil and the real SR Linux lab early. A mock proves your *interface*; only the real adapter proves your *integration with reality*. Replace mocks the instant each is ready.
 
 ### 11.3 Build order
 
-`interfaces` (sketch thin) → `netlab` + `contracts` (parallel, no deps) → `netctl` + `chain-mcp` (parallel) → `controller` (vs mocks) → `agents` (vs mock tools) → `e2e` (progressive mock replacement).
+`interfaces` (sketch thin) → `netlab` + `contracts` (parallel, no deps) → `netctl` + `chainmcp` (parallel) → `controller` (vs mocks) → `agents` (vs mock tools) → `e2e` (progressive mock replacement).
 
 > Interfaces are **sketched thin, not frozen** — enough to decouple and run a skeleton, then evolved by feedback. Designing them perfectly upfront is "the lure of the plan."
 
@@ -368,7 +368,7 @@ The published language to define before the adapters (and to version):
 
 - **Entitlement read interface** — what the controller reads from settlement (owner, terms, status).
 - **Provisioning interface** — `apply_bandwidth`, `apply_telemetry`, `teardown` (the port `netctl` implements).
-- **MCP tool schemas** — the tool signatures agents call (`chain-mcp`, `netctl`).
+- **MCP tool schemas** — the tool signatures agents call (`chainmcp`, `netctl`).
 - **A2A message schema** — discovery, offer (signed), accept.
 
 These are small, stable, and the project's backbone. They surface only as much of the deferred contract-field detail as each seam actually needs.
@@ -382,7 +382,7 @@ These are small, stable, and the project's backbone. They surface only as much o
 | --------------------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | **Unit**                  | Controller domain (predicate, lifecycle, translators), pure     | Logic correctness, fast feedback, good modularity                         |
 | **Contract**              | Foundry tests on settlement                                     | Swap atomicity, single-use offers, mint-at-swap, revocation, expiry reads |
-| **Adapter / integration** | `netctl` vs real lab; `chain-mcp` vs Anvil; controller adapters | Integration with reality (not just mocks)                                 |
+| **Adapter / integration** | `netctl` vs real lab; `chainmcp` vs Anvil; controller adapters | Integration with reality (not just mocks)                                 |
 | **End-to-end**            | Walking skeleton → full lifecycle per service                  | The whole loop holds together; both`serviceType`s                         |
 
 Tests are experiments: hypothesis, run, measure. The mock seams let you control variables — swap one real component in; if it breaks, you know where.
@@ -438,7 +438,7 @@ Roughly three working months; indicative, not a contract.
 | Phase  | Focus                                                                               | Output                                                                                                                               |
 | -------- | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | **P1** | `netlab` + `contracts` foundations; `interfaces` sketch; **walking skeleton** in CI | Lab spins up; Foundry suite green; mocked end-to-end runs                                                                            |
-| **P2** | Bandwidth service real end-to-end                                                   | `netctl.apply_bandwidth`, `chain-mcp`, `controller` (bandwidth translator) wired; bandwidth lifecycle green against real Anvil + lab |
+| **P2** | Bandwidth service real end-to-end                                                   | `netctl.apply_bandwidth`, `chainmcp`, `controller` (bandwidth translator) wired; bandwidth lifecycle green against real Anvil + lab |
 | **P3** | Telemetry service real end-to-end                                                   | `apply_telemetry` + telemetry translator; second `serviceType` green (reuses settlement/controller core)                             |
 | **P4** | Agent autonomy + A2A                                                                | LangGraph graphs, MCP clients, A2A discovery/offer/accept; agents drive the loop against real components                             |
 | **P5** | e2e demo + dashboard + thesis integration                                           | Streamlit dashboard; full demo for both services; results folded into the paper/defense                                              |

@@ -66,7 +66,14 @@ SR Linux routers via gNMI.
   `sudo containerlab deploy -t netlab/topology.clab.yml`.
 - Canonical example values (Ada/Bell/ticket #7/10 TOK/50 Mbps) come from
   `a2a_interfaces.fixtures` — story, docs, and tests share them; change them in one place
-  or not at all.
+  or not at all. Prose/schemas may *quote* these values but never introduce a divergent one.
+- Writing standard: comments and docs follow `docs/04-writing-standard.md` — comments say
+  what the code can't (decision/boundary/subtlety/pre-empted mistake), never restate it;
+  docs build motivation→idea→mechanism, grounded in the canonical example. Each milestone's
+  evidence checklist asserts the slice meets `docs/04`.
+- Plan-of-record: `docs/01-implementation-plan.md` (milestone map; order is *not* numeric:
+  M0.1 → M1.1 → M0.2 → M0.3 → M1.2 …) + per-milestone `docs/evidence/M<id>.md`. There is no
+  `PLAN.md`; the `/slice` skill's PLAN.md steps map onto the evidence file instead.
 
 ## When asked to "just make it work"
 

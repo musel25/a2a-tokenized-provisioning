@@ -3,7 +3,9 @@ name = "a2a-interfaces"
 version = "0.0.0"
 description = "Published language: cross-package shapes and ports (see docs/03-interfaces.md)"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "pydantic>=2.7",
+]
 
 [build-system]
 requires = ["hatchling"]

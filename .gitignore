@@ -1,16 +1,31 @@
-# Python
+# --- Python ---
 __pycache__/
 *.py[cod]
 .venv/
 .pytest_cache/
 .ruff_cache/
+.mypy_cache/
+build/
 dist/
 *.egg-info/
 
-# Foundry (contracts/ arrives at M1.1; libs are git submodules)
+# --- Foundry / contracts ---
+# The real contracts/ lives on its milestone branch (m1.1-foundry-hello) until merged.
+# These ignore forge's generated build output. forge-std is tracked as a git submodule,
+# so contracts/lib/ is deliberately NOT ignored.
 contracts/cache/
 contracts/out/
+contracts/broadcast/
 
-# env / local
+# --- Environment / local runs ---
 .env
+.env.local
 e2e/runs/
+
+# --- Editor / OS cruft ---
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+*~

@@ -1,6 +1,6 @@
 # 01 — Implementation plan: skeleton first, then grow
 
-> **Status:** canonical. Supersedes the milestone sketch from chat (change: the Python
+> **Status:** canonical. Supersedes the earlier milestone sketch (change: the Python
 > chain client is now M1.5, inside Phase 1, so the skeleton gets its first real organ
 > immediately after the contracts exist).
 > **Companions:** `docs/00-the-story.md` (concepts) · `docs/03-interfaces.md` (schemas) ·
@@ -86,7 +86,7 @@ The skeleton lifecycle test runs in CI forever, in `mock` profile. Profiles sele
 | M5.1 | LLM client (ADR-001) + structured decision | 0.5 | 20/20 valid decisions vs local Ollama | 5 |
 | M5.2 | Consumer LangGraph graph (tool stubs) | 1 | transcript shows full happy path | 9 |
 | M5.3 | Provider graph + admission control | 1 | over-capacity quote is declined | 8 |
-| M5.4 | MCP servers: chain-mcp, ctrl-mcp | 1.5 | agent buys via tools on Anvil | 3, 5 |
+| M5.4 | MCP servers: chainmcp, ctrl-mcp | 1.5 | agent buys via tools on Anvil | 3, 5 |
 | M5.5 | A2A: cards, skills, registry (pinned SDK) | 1.5 | card fetched; offer over the wire | 9 |
 | M5.6 | **Skeleton v4** — agents drive everything | 1 | full agent-driven run, real stack | all |
 | M6.1 | One-command bring-up | 1 | `just up` → healthchecks pass | 9 |
@@ -141,9 +141,10 @@ directly — what sits between them? (2) What exactly does CI re-run on every pu
 
 #### M1.1 — Foundry + Anvil hello world
 
-Already fully specified in our chat (Counter + event + deploy + cast round-trip). Do it
-inside `contracts/`. Evidence: `forge test` ×3 green, `cast call` returns the incremented
-value, `cast logs` shows the event.
+Spec: a `Counter` contract with an `Incremented` event, a deploy script, and a `cast`
+round-trip — delivered on branch `m1.1-foundry-hello`, inside `contracts/`. Evidence:
+`forge test` ×3 green, `cast call` returns the incremented value, `cast logs` shows the
+event.
 
 **Explain-back.** (1) Transaction vs call — which one will `fulfill` be, which one will the
 controller's reads be, and why does that matter for cost and trust? (2) What is an event
@@ -458,7 +459,7 @@ memory (ADR-002).*
   over-capacity → the §1.2 decline) → build offer → `sign_offer`. *Validate:* request
   60 Mbps twice against a 100 Mbps ledger → second declines (ch. 8's no-overselling,
   as a test).
-- **M5.4 MCP servers.** Wrap ChainClient as `chain-mcp` (per-agent instance, that agent's
+- **M5.4 MCP servers.** Wrap ChainClient as `chainmcp` (per-agent instance, that agent's
   key — the custody rule), controller API as `ctrl-mcp`; switch graphs from stubs to MCP
   tools. *Validate:* an agent-driven purchase mints on Anvil end to end via tools.
 - **M5.5 A2A.** Provider A2A servers (cards + `quote_*` skills) on :9101/:9102, consumer
