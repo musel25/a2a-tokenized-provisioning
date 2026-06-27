@@ -80,6 +80,23 @@ A→B for 10 TOK, minting ticket #7 to Ada." Prefer the second, always.
 model — `docs/00` Chapter 8's trustless-vs-assumed table, and `docs/02` §6 "What is NOT
 here yet". A doc that only describes the finished system lies about the present.
 
+**Name the producer and consumer — and show the shape crossing the boundary.** A shape doc
+that says what a struct *is* but never *which module builds it and which reads it* leaves
+the reader knowing the noun and not the verb. For every cross-boundary shape, state the hop
+in module terms — *"built in `agents/ada`, validated in `agents/bell`"* — and show the
+two-line seam: `.model_dump()` on the producer, construction or `.validate_python()` on the
+consumer. If the consuming module isn't built yet, show the sketch and label it `PLANNED
+(M<id>)` (scope-borders rule above). The model — `docs/03a` §2.1. The reason: validation is
+an *event at a boundary*, not a property of a type; a reader who can't see where it happens
+believes the type validates itself everywhere, and misplaces the check.
+
+**Carry a true beginner: gloss each term where it first appears.** The first time a doc uses
+*serialize*, *discriminated union*, *port*, *ABI*, *snake_case*, give a one-clause plain-words
+gloss before the jargon — *"serialize (flatten the live object into plain text to send)"*.
+Assume the reader has not met the term. A teaching doc that uses an unexplained term has
+dumped the reader, not carried them (this standard's header). Once glossed, trust the gloss —
+don't re-explain on every recurrence; that is its own noise.
+
 ---
 
 ## 3. One canonical example, one source
@@ -115,6 +132,20 @@ one lab), or the controller").
 "surprises/deviations" section, a checklist whose green marks are each backed by pasted
 proof. Any block that is reformatted rather than literally pasted must be labeled
 `(reconstructed)`. Model: `docs/evidence/M0.1.md`.
+
+**Walkthrough (lifecycle / concept companion)** — a teaching doc that follows one path end
+to end, or unfolds one concept, naming the real class in the real file at every step and
+cashing it out in the canonical example. It is distinct from a *reference* (`docs/03`): a
+reference says what each shape *is*; a walkthrough says how the shapes *connect over time*
+and *which module touches each*. Rules: every step links to source as `file.py:line` (not a
+prose paraphrase the reader can't click); every diagram must earn its place by showing a
+relation prose makes hard — a `sequenceDiagram` for the hops across modules, plus at most
+one structural diagram (`flowchart` for an on/off-chain split or an atomic operation,
+`stateDiagram-v2` for a lifecycle enum). A diagram that just lists what the text already
+said is the visual form of a restating comment — cut it. Open with the one-sentence answer
+the reader came for; close with a single check question. Model: `docs/03b-lifecycle-walkthrough.md`
+(every step links to `models.py`/`ports.py` by line; the `fulfill` flowchart shows the six
+atomic effects; the `SessionState` diagram shows the enum no paragraph could).
 
 **README stub** — job → constraining rule/ADR (by number) → arrival milestone → what it may
 depend on. Model: `agents/README.md`.
