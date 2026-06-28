@@ -75,6 +75,28 @@ SR Linux routers via gNMI.
   M0.1 → M1.1 → M0.2 → M0.3 → M1.2 …) + per-milestone `docs/evidence/M<id>.md`. There is no
   `PLAN.md`; the `/slice` skill's PLAN.md steps map onto the evidence file instead.
 
+## After each slice: check the docs and decide what to update
+
+Finishing a slice is not done until you have *walked this list and decided* for each
+doc whether the slice changed the thing it describes. Most slices touch one or two of
+these; the point is the deliberate check, not editing all of them. Do the doc edits in
+the **same commit** as the code they describe.
+
+| Doc | Update it when… | Mandatory? |
+|---|---|---|
+| `docs/evidence/M<id>.md` | always — real pasted output + explain-back + surprises | **yes, every slice** |
+| `docs/03-interfaces.md` (+ bump the shape's `v`) | you changed any cross-package shape | yes, *if* a shape changed — same commit |
+| `docs/01-implementation-plan.md` | a milestone completed or its scope/status shifted | when the map changes |
+| `docs/adr/00X-*.md` (new) | you made a decision with real alternatives | when a decision was made |
+| `docs/03a/03b/03c-*-walkthrough.md` | behavior a walkthrough explains changed | if that behavior changed |
+| `docs/02-architecture.md` | a structural change (new package, changed import edge) | rare |
+| `docs/00-the-story.md` | a *concept* changed | almost never |
+| `README.md` | the user-facing surface changed (new command/entry point) | if surface changed |
+
+Shortcut: the evidence file is non-negotiable; everything else is conditional on
+"did this slice change what that doc describes?" The interfaces rule is the strict one —
+shape change ⇒ `v` bump + `docs/03` in the *same* commit, never a follow-up.
+
 ## When asked to "just make it work"
 
 Prefer the smallest change that keeps every rule above. If a rule blocks the task, say so

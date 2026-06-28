@@ -3,3 +3,4 @@ src = "src"
 out = "out"
 libs = ["lib"]
 solc = "0.8.30" # pinned (CLAUDE.md convention): same compiler everywhere, forever
+remappings = ["@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/"]
