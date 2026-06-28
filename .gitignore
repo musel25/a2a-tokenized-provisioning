@@ -10,8 +10,7 @@ dist/
 *.egg-info/
 
 # --- Foundry / contracts ---
-# The real contracts/ lives on its milestone branch (m1.1-foundry-hello) until merged.
-# These ignore forge's generated build output. forge-std is tracked as a git submodule,
+# Ignore forge's generated build output. forge-std is tracked as a git submodule,
 # so contracts/lib/ is deliberately NOT ignored.
 contracts/cache/
 contracts/out/
