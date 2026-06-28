@@ -7,7 +7,9 @@
 > Bell (ticket #7, 10 TOK) end to end, naming the real class in the real file at every
 > step. It is the narrative companion to [`03-interfaces.md`](03-interfaces.md) and
 > [`03a-interfaces-walkthrough.md`](03a-interfaces-walkthrough.md); the concepts come
-> from [`00-the-story.md`](00-the-story.md).
+> from [`00-the-story.md`](00-the-story.md). Its code-level twin —
+> *how the v0 skeleton actually runs this lifecycle* — is
+> [`03c-skeleton-walkthrough.md`](03c-skeleton-walkthrough.md).
 
 All classes named below live in
 [`interfaces/src/a2a_interfaces/models.py`](../interfaces/src/a2a_interfaces/models.py)
