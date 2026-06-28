@@ -9,6 +9,10 @@ dependencies = []
 members = ["interfaces", "e2e"]
 
 [dependency-groups]
+demo = [
+    "ipykernel>=7.3.0",
+    "nbconvert>=7.17.1",
+]
 dev = [
     "pytest>=8.0",
     "ruff>=0.4",
@@ -20,3 +24,5 @@ testpaths = ["interfaces/tests", "e2e/tests"]
 [tool.ruff]
 line-length = 100
 src = ["interfaces/src", "e2e/src"]
+# Teaching notebooks under e2e/notebooks/ are exploratory artifacts, not library code.
+extend-exclude = ["e2e/notebooks"]
