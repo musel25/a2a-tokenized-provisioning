@@ -17,6 +17,10 @@ contracts/cache/
 contracts/out/
 contracts/broadcast/
 
+# --- Notebooks (the .ipynb is tracked; these are generated caches) ---
+.ipynb_checkpoints/
+__marimo__/
+
 # --- Environment / local runs ---
 .env
 .env.local
