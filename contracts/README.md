@@ -13,3 +13,6 @@ forge script script/Deploy.s.sol --rpc-url http://localhost:8545 \
 ```
 
 - solc pinned in `foundry.toml`; `lib/forge-std` is a git submodule of the parent repo
+
+**Hands-on tour:** [`EXPLORE.md`](EXPLORE.md) — build, test, deploy, and the
+call-vs-transaction experiment, step by step.
