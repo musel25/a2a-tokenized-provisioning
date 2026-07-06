@@ -226,7 +226,23 @@ usable* is the controller's job at activation time (M4), against chain time.
 instead of unique ids) with an open `faucet` because it is stage money for the lab. The
 settlement never holds TOK; it moves it straight buyer → provider.
 
-## 9. See it — or break it — yourself
+## 9. How a ticket dies (M1.4): two opposite deaths, zero deletions
+
+**Expiry is passive.** At 16:00 the chain does *nothing* — no timer, no callback, no flag.
+"Expired" is a judgment any reader makes by comparing the stored `endTime` with chain
+time. (So who turns off Ada's bandwidth? The controller, on its own clock — M4.5. The
+chain only holds the facts.)
+
+**Revocation is active.** Bell — and only Bell, the *issuer* (I4; Ada the owner gets
+`NotIssuer`) — sends `revoke(7)`: one bit flips in storage and a `Revoked(7)` event fires.
+That event is the controller's wake-up call to tear the session down mid-window.
+
+**Neither death deletes anything** (I5, I8): the token keeps its owner, every term stays
+readable, and the fine print (`tokenURI` — a self-contained `data:` JSON rendered from
+storage on each call, I7) simply reports `"revoked": true`. A dead ticket is evidence,
+not garbage.
+
+## 10. See it — or break it — yourself
 
 - **See it (storage + ownership):** [`contracts/EXPLORE-settlement.md`](../contracts/EXPLORE-settlement.md) —
   create ticket #7, read its terms off the chain, transfer it, watch the owner flip while
@@ -234,6 +250,9 @@ settlement never holds TOK; it moves it straight buyer → provider.
 - **See it (the purchase):** [`contracts/EXPLORE-fulfill.md`](../contracts/EXPLORE-fulfill.md) —
   *be* Bell and Ada: sign a real offer with `cast`, redeem it, then replay it, underfund it,
   tamper with it, and let it expire — four refusals, each with its named error.
+- **See it (the deaths):** [`contracts/EXPLORE-revoke.md`](../contracts/EXPLORE-revoke.md) —
+  decode the on-chain fine print, watch expiry do nothing, pull the kill switch as Bell
+  (and fail to as Ada).
 - **Break it:** in [`fulfill`](../contracts/src/Settlement.sol), swap the two lines
   `consumed[digest] = true;` and the `safeTransferFrom(...)` call, then run `forge test`.
   Everything stays green — the EVM's rollback makes the order irrelevant for I3 — but now

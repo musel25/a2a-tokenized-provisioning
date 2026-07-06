@@ -4,6 +4,8 @@ pragma solidity ^0.8.30;
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
+import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 
@@ -13,12 +15,13 @@ import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 /// storage*, not behind a URL: the network's gatekeeper authorizes by on-chain ownership
 /// alone (ch. 3), so terms that could 404 or be edited would be worthless.
 ///
-/// M1.2 built storage + ownership; M1.3 adds the one public door, `fulfill` (story ch. 4's
-/// vending machine): verify the provider's EIP-712 signature, pull payment, mint — all in
-/// one transaction or not at all (I3). Minting stays `internal` (`_issue`), so `fulfill`
-/// remains the only mint path — invariant I1 (docs/04 §3). `revoke`/`tokenURI` land at
-/// M1.4. Only the enforceable fields are stored; the descriptive SLA stays off-chain
-/// behind `termsHash` (docs/03 §2.2).
+/// M1.2 built storage + ownership; M1.3 added the one public door, `fulfill` (story
+/// ch. 4's vending machine): verify the provider's EIP-712 signature, pull payment,
+/// mint — all in one transaction or not at all (I3). Minting stays `internal` (`_issue`),
+/// so `fulfill` remains the only mint path — invariant I1 (docs/04 §3). M1.4 completes
+/// the ticket's life cycle: `revoke` (issuer-only flag, never a burn — I4/I5) and an
+/// on-chain `tokenURI` rendered from storage (I7). Only the enforceable fields are
+/// stored; the descriptive SLA stays off-chain behind `termsHash` (docs/03 §2.2).
 contract A2ASettlement is ERC721, EIP712 {
     using SafeERC20 for IERC20;
     struct Entitlement {
@@ -51,17 +54,20 @@ contract A2ASettlement is ERC721, EIP712 {
     }
 
     // The three shared deny-path names mirror the skeleton FakeChain's exceptions
-    // (docs/04 §3) so the Foundry and e2e deny tests read as one spec. The other two
+    // (docs/04 §3) so the Foundry and e2e deny tests read as one spec. The rest
     // deliberately have no twin: the funds revert is the token's own error
-    // (ERC20InsufficientAllowance/Balance), and BadSignature can't exist in the fake —
-    // fakes don't verify signatures.
+    // (ERC20InsufficientAllowance/Balance), BadSignature can't exist in the fake
+    // (fakes don't verify signatures), and NotIssuer can't either (the fake's revoke
+    // has no caller identity to check).
     error OfferExpired();
     error WrongConsumer();
     error OfferAlreadyUsed();
     error BadSignature();
+    error NotIssuer();
 
     event EntitlementMinted(uint256 indexed id, address indexed issuer, uint8 serviceType, address indexed consumer);
     event OfferConsumed(bytes32 offerHash);
+    event Revoked(uint256 indexed id);
 
     /// keccak256 of the EIP-712 type string. Field names and ORDER must match `Offer`
     /// above and docs/03 §1.4 exactly — one reordered word here and every signature
@@ -155,6 +161,54 @@ contract A2ASettlement is ERC721, EIP712 {
 
         emit OfferConsumed(digest);
         emit EntitlementMinted(entitlementId, offer.provider, offer.serviceType, msg.sender);
+    }
+
+    /// The issuer's kill switch (story ch. 8): sets ONE bit and fires the event the
+    /// controller's watcher acts on. Never a burn (I5) — the token, its owner, and its
+    /// terms stay readable evidence of what was promised (I8). The owner cannot revoke:
+    /// the switch belongs to the party bound by the promise, not its beneficiary.
+    /// Expiry, by contrast, has no function here at all — it is *passive*; nothing
+    /// happens on-chain at `endTime`, readers judge staleness against chain time
+    /// (ADR-004).
+    ///
+    /// Re-revoking is deliberately a no-op-like success (flag re-set, event re-fired),
+    /// matching FakeChain.revoke; downstream teardown is idempotent (rule 8), so a
+    /// duplicate event is harmless. The issuer check doubles as the existence check:
+    /// an unminted id has issuer address(0), which msg.sender can never be.
+    function revoke(uint256 entitlementId) external {
+        if (entitlements[entitlementId].issuer != msg.sender) revert NotIssuer();
+        entitlements[entitlementId].revoked = true;
+        emit Revoked(entitlementId);
+    }
+
+    /// The ticket's fine print as a self-contained `data:` URI — rendered from storage
+    /// on every call, so it can never 404 and never lie (I7): revoke the ticket and the
+    /// JSON flips with the flag. `params` is deliberately omitted (an ABI blob is not
+    /// JSON-friendly; decoders read it from `entitlements(id)` per docs/03 §4.2);
+    /// `resourceId`/`termsHash` are included so the URI alone identifies what was sold.
+    function tokenURI(uint256 tokenId) public view override returns (string memory) {
+        _requireOwned(tokenId); // unminted ids revert, same existence rule as ownerOf
+        Entitlement storage e = entitlements[tokenId];
+        string memory json = string.concat(
+            '{"name":"A2A Entitlement #',
+            Strings.toString(tokenId),
+            '","issuer":"',
+            Strings.toHexString(e.issuer),
+            '","serviceType":',
+            Strings.toString(e.serviceType),
+            ',"resourceId":"',
+            Strings.toHexString(uint256(e.resourceId), 32),
+            '","startTime":',
+            Strings.toString(e.startTime),
+            ',"endTime":',
+            Strings.toString(e.endTime),
+            ',"revoked":',
+            e.revoked ? "true" : "false",
+            ',"termsHash":"',
+            Strings.toHexString(uint256(e.termsHash), 32),
+            '"}'
+        );
+        return string.concat("data:application/json;base64,", Base64.encode(bytes(json)));
     }
 
     /// Mint a fresh entitlement to `to`, freezing `issuer…termsHash` in storage forever

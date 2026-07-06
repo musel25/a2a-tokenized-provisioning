@@ -32,3 +32,6 @@ e2e/runs/
 *.swp
 *.swo
 *~
+
+# machine-local deploy artifact (regenerate with `just deploy-local`)
+deployments/

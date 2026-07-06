@@ -11,3 +11,8 @@ remappings = ["@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/"]
 # accurate source maps in forge traces — too dear in a learn-by-poking repo. If a future
 # edit re-trips stack-too-deep even with the optimizer, switch to via_ir then.)
 optimizer = true
+# Deploy.s.sol writes the deployment artifact. Foundry refuses fs paths above its own
+# root (tried: ../deployments — hard denial), so the artifact lives inside contracts/,
+# owned by the package that produces it; Python readers use contracts/deployments/
+# (docs/03 §2.4). Write-scoped to that one directory.
+fs_permissions = [{ access = "read-write", path = "./deployments" }]
