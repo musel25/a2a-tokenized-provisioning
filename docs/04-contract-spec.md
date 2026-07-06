@@ -50,11 +50,11 @@ ownership bookkeeping and add only what is ours — the `Entitlement` terms.
 | **I1** | Only `fulfill` can mint an entitlement | no public mint path; mint is `internal`; `fulfill` is `_issue`'s sole production caller | M1.2 (structural) → **M1.3 (full)** |
 | **I2** | Each offer salt is fulfillable exactly once | replay reverts `OfferAlreadyUsed` (`test_I2_*`) | **M1.3** ✓ |
 | **I3** | Payment and mint are atomic — both, or neither | revert-rollback proof (no NFT, salt unconsumed, balances intact) | **M1.3** ✓ |
-| **I4** | Only the issuer may revoke | non-issuer `revoke` reverts | M1.4 |
-| **I5** | Revoke sets a flag, never burns the token | after revoke, `ownerOf` still returns the owner | M1.4 |
-| **I6** | Terms in storage are immutable after mint | terms identical before/after an ERC-721 transfer | **M1.2** |
-| **I7** | `tokenURI` is derived purely from storage | rendered JSON matches stored fields | M1.4 |
-| **I8** | An expired/revoked entitlement still exists and is readable | `entitlements(id)` returns after expiry/revoke | M1.2 (readable) → M1.4 (expiry/revoke) |
+| **I4** | Only the issuer may revoke | non-issuer/owner/stranger `revoke` → `NotIssuer` | **M1.4** ✓ |
+| **I5** | Revoke sets a flag, never burns the token | after revoke: `ownerOf` intact, 8 fields identical, one bit changed | **M1.4** ✓ |
+| **I6** | Terms in storage are immutable after mint | terms identical before/after an ERC-721 transfer | **M1.2** ✓ |
+| **I7** | `tokenURI` is derived purely from storage | exact expected `data:` URI reproduced from the same storage | **M1.4** ✓ |
+| **I8** | An expired/revoked entitlement still exists and is readable | 30-day warp: `tokenURI` byte-identical, `ownerOf` intact | **M1.4** ✓ |
 
 ### I1 — only `fulfill` mints
 **Why.** The ticket is *load-bearing* (story ch. 3): the network's gatekeeper authorizes by
@@ -97,10 +97,25 @@ relying on rollback alone.
 window opens is legitimate (Ada buys at 13:45 for 14:00); *using* the window is the
 controller's decision at activation, against chain time (ADR-004).
 
-### I4 — only issuer revokes · I5 — revoke is a flag, not a burn
-Deferred to **M1.4**. Note already for then (ch. 8): expiry is *passive* (the chain does
-nothing at 16:00), revocation is *active* and stays a flag so the token — and its history —
-remain readable.
+### I4 — only issuer revokes · I5 — revoke is a flag, not a burn  *(landed M1.4)*
+**Why.** I4: revocation is the issuer's emergency brake on *his own promise* (ch. 8) — in
+Ada's hands it would be meaningless (she can simply not use the ticket), in a stranger's
+it would be sabotage. I5: a burned ticket erases the evidence; a flagged one stays a
+public record of what was promised and what was withdrawn.
+
+**How (M1.4).** `revoke(id)` gates on `entitlements[id].issuer == msg.sender`
+(`NotIssuer` otherwise — which also rejects unminted ids, whose issuer slot is
+`address(0)`), sets the one bit, and emits `Revoked(id)` — the event the controller's
+watcher will subscribe to (M4.5). Re-revoking succeeds idempotently (parity with
+`FakeChain.revoke`; downstream teardown is idempotent, rule 8). Proven by
+`test/Revoke.t.sol`: `test_I4_issuerRevokeSetsFlagAndEmits`, `test_I4_ownerCannotRevoke`,
+`test_I4_strangerCannotRevoke`, `test_I5_revokeDoesNotBurnOrRewriteTerms` (all eight
+fields byte-identical, `ownerOf` intact, exactly one bit changed).
+
+**Expiry, by contrast, is passive** and has *no function at all*: nothing on-chain moves
+at 16:00 (`test_I8_expiryIsPassive_chainDoesNothingAt1600` warps 30 days past `endTime`
+and asserts `tokenURI` is byte-identical). "Expired" is a reader's judgment against chain
+time (ADR-004); *acting* on it is the controller's job.
 
 ### I6 — terms immutable after mint  *(this milestone)*
 **Why.** A concert ticket whose seat number can be edited after sale is worthless. Ticket
@@ -111,13 +126,25 @@ in the contract's storage (not a URL that can 404 or be re-edited — ch. 2).
 third address; read `entitlements(7)` again — **every field identical**; only `ownerOf(7)`
 changed. The terms are bound to the token, not to the holder.
 
-### I8 — an expired/revoked entitlement still exists  *(readability this milestone)*
+### I7 — `tokenURI` is the storage, restated  *(landed M1.4)*
+**Why.** The ticket's fine print must share the terms' tamper-proof home: an `https://`
+URI is a promise some web server outlives the ticket; a `data:` URI rendered from storage
+on every call cannot 404 and cannot lie.
+**How.** `tokenURI(id)` string-concats the stored fields into JSON and base64-wraps it
+(OZ `Base64`/`Strings`); unminted ids revert via `_requireOwned` (the M1.2 existence
+rule). `params` is deliberately omitted (ABI blob; decoders use `entitlements(id)` per
+docs/03 §4.2). Proven by `test_I7_tokenURIDerivesPurelyFromStorage` (expected URI rebuilt
+from the same storage, byte-equal) and `test_I7_tokenURIReflectsRevocation` (revoke →
+rendered JSON flips live).
+
+### I8 — an expired/revoked entitlement still exists  *(complete as of M1.4)*
 **Why.** The controller must be able to read *why* it is denying service ("this ticket
 expired at 16:00"), which is impossible if expiry deletes the record. v0 keeps every
 entitlement permanently readable.
-**How (M1.2).** Storage exists and `entitlements(id)` returns the full struct for any minted
-id. The *expiry* and *revoked* semantics that I8 ultimately guards arrive with `vm.warp`
-time-travel tests and `revoke` at M1.4.
+**How.** M1.2 made storage permanent (`entitlements(id)` always returns). M1.4 proves the
+two death modes leave it intact: `vm.warp` 30 days past `endTime` → everything
+byte-identical (expiry is passive); revoke → one bit flips, owner and terms remain
+(`test_I5_…`, `test_I8_…`).
 
 ---
 
@@ -138,8 +165,12 @@ transaction. I1 is now *behavioral*, not just structural: `fulfill` is `_issue`'
 production caller, and `test/Fulfill.t.sol` exercises the production contract with no
 harness at all.
 
+**M1.4 — the rest of the ticket's life (I4, I5, I7, I8 complete).** `revoke` (issuer-only
+flag + `Revoked` event), on-chain `tokenURI` (base64 `data:` JSON rendered from storage),
+and the real `script/Deploy.s.sol` → `contracts/deployments/anvil.json` (+ `just
+deploy-local`). All eight invariants now have green tests next to them.
+
 **Explicitly *not* built yet (scope border in ink):**
-- `revoke`, `Revoked` event, `tokenURI`, the deploy script → **M1.4** (I4, I5, I7).
 - Any Python client / cross-stack signature → **M1.5**.
 
 ---

@@ -8,7 +8,7 @@ real and the outputs shown are captured from an actual run.
 > **Audience:** beginner to Solidity/EVM. Jargon is glossed on first use. The conceptual
 > companion (why any of this exists) is the M1.1 evidence file
 > [`docs/evidence/M1.1.md`](../docs/evidence/M1.1.md); the code is `src/Counter.sol`,
-> `test/Counter.t.sol`, `script/Deploy.s.sol`.
+> `test/Counter.t.sol`, `script/DeployCounter.s.sol`.
 
 The three tools you'll use, all from Foundry:
 - **`forge`** — compile, test, deploy (the build tool).
@@ -93,7 +93,7 @@ KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80   # anvil
 ### 2b. Deploy the Counter
 
 ```sh
-forge script script/Deploy.s.sol --rpc-url $RPC --broadcast --private-key $KEY
+forge script script/DeployCounter.s.sol --rpc-url $RPC --broadcast --private-key $KEY
 ```
 
 `--broadcast` is the switch that turns the script's `vm.startBroadcast()` block into **real
@@ -107,7 +107,7 @@ ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
 Grab the deployed address (it's in the broadcast log):
 
 ```sh
-ADDR=$(jq -r '.transactions[0].contractAddress' broadcast/Deploy.s.sol/31337/run-latest.json)
+ADDR=$(jq -r '.transactions[0].contractAddress' broadcast/DeployCounter.s.sol/31337/run-latest.json)
 echo $ADDR     # -> 0x5fbdb2315678afecb367f032d93f642f64180aa3
 ```
 

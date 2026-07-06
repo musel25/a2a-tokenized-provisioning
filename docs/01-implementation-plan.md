@@ -312,13 +312,13 @@ travel in tests — this is ADR-004 paying off: expiry tests without `sleep`. On
 
 **Build.** `revoke(id)` with `onlyIssuer` check + `Revoked` event; `tokenURI(id)`
 rendering issuer/serviceType/window/revoked from storage; `script/Deploy.s.sol`
-broadcasting MockTOK + Settlement and writing `deployments/anvil.json` (addresses) — the
+broadcasting MockTOK + Settlement and writing `contracts/deployments/anvil.json` (addresses; Foundry cannot write above its own root — see M1.4 evidence) — the
 artifact every Python package will read.
 
 **Validate.** Warp past `endTime`, assert a view of your choice reflects it; non-issuer
 revoke reverts; `cast call ... "tokenURI(uint256)" 1`, base64-decode, see the JSON.
 `just deploy-local` (script: start/expect Anvil, run forge script) leaves a valid
-`deployments/anvil.json`.
+`contracts/deployments/anvil.json`.
 
 **Explain-back.** (1) Why is revoke a flag and not a burn? (2) Who *acts* on expiry, given
 that the chain does nothing at 16:00?
@@ -336,7 +336,7 @@ green, chapters 4 and 5 are physically true. Owner-proofs (the `a2a-activate|...
 use simple message signing (EIP-191); note the controller will verify those *in Python*
 (`Account.recover_message`) — no Solidity involved.
 
-**Build.** `chainmcp/src/chainmcp/client.py`: reads `deployments/anvil.json` + ABI from
+**Build.** `chainmcp/src/chainmcp/client.py`: reads `contracts/deployments/anvil.json` + ABI from
 `contracts/out/`; implements `owner_of`, `get` (ABI-decode `params` per serviceType into
 the pydantic views), `chain_time` (latest block timestamp), `watch_revoked` (background
 log polling, ~1 s); write side: `faucet`, `approve_and_fulfill(signed_offer)`,
