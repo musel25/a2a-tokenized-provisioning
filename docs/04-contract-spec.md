@@ -69,6 +69,15 @@ conjure a free entitlement and get service for nothing — the entire payment gu
 Deferred to **M1.3** (this is story ch. 4, the vending machine). Listed here so the spec is
 whole; `fulfill`, the salt ledger, and the atomic `transferFrom`+mint do not exist yet.
 
+Already *rehearsed*, though: since the post-M0.3 review hardening, the skeleton's
+`FakeChain.fulfill` checks in the contract's planned revert order — expired → consumer
+binding → salt → funds — before any mutation, and `e2e/tests/test_lifecycle.py` carries one
+deny-path test per check, each asserting the world is left untouched (I3 in cardboard).
+Those tests are the parity spec M1.3's Foundry revert tests must match, check for check.
+The one structural difference to keep in mind when writing the Solidity: the fake needs
+checks-before-mutation because Python has no rollback; the contract gets I3 from the EVM —
+a revert undoes every storage write in the transaction, whatever the order.
+
 ### I4 — only issuer revokes · I5 — revoke is a flag, not a burn
 Deferred to **M1.4**. Note already for then (ch. 8): expiry is *passive* (the chain does
 nothing at 16:00), revocation is *active* and stays a flag so the token — and its history —

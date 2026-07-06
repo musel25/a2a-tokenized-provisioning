@@ -291,7 +291,11 @@ consumed (the whole world rolled back). Fuzz salts and prices. Sign in tests wit
 **Watch for.** The `bytes params` keccak rule above (the classic bug); field *order* in
 the typehash string must match the struct; use OZ ECDSA (it guards signature
 malleability for you — ask Claude Code to explain what malleability is when you get
-there).
+there). Also: the skeleton's `FakeChain.fulfill` (post-M0.3 review hardening) already
+encodes the check order — expired → consumer binding → salt → funds — with one e2e
+deny-path test per check (`docs/04` §3, I2/I3). Keep the contract's revert order aligned
+with the fake, and name the custom errors after the fake's exceptions (`OfferExpired`,
+`WrongConsumer`, `OfferAlreadyUsed`) so the parity is legible.
 
 **Explain-back.** (1) Walk the six effects of `fulfill` and say what happens to each if
 step four reverts. (2) Why is the salt ledger on-chain rather than in the provider's

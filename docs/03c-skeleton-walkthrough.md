@@ -87,7 +87,7 @@ flowchart TB
 ```
 
 This is why the *first* test in the suite checks nothing about behaviour — only that the
-cardboard is the right *shape* ([test_lifecycle.py:54](../e2e/tests/test_lifecycle.py#L54)):
+cardboard is the right *shape* ([test_lifecycle.py:62](../e2e/tests/test_lifecycle.py#L62)):
 
 ```python
 def test_fakes_satisfy_ports():
@@ -134,7 +134,7 @@ Read them in story order: the props that hold *data* (`fakes.py`), the props tha
 
 ### 4a. `FakeClock` — a clock you can fast-forward
 
-[fakes.py:45](../e2e/src/e2e/skeleton/fakes.py#L45). The real clock is "what time the
+[fakes.py:57](../e2e/src/e2e/skeleton/fakes.py#L57). The real clock is "what time the
 blockchain thinks it is" (`block.timestamp`). In a test you cannot wait two real hours for an
 entitlement to expire, so the fake clock is just **one integer you can shove forward**:
 
@@ -153,7 +153,7 @@ the test it starts at `1757943120` (≈13:32) and we later `advance(1800)` (30 m
 
 ### 4b. `FakeChain` — a blockchain that is really a dict
 
-[fakes.py:58](../e2e/src/e2e/skeleton/fakes.py#L58). The star prop. Ethereum does payment,
+[fakes.py:70](../e2e/src/e2e/skeleton/fakes.py#L70). The star prop. Ethereum does payment,
 NFT minting, signature checks, gas. `FakeChain` keeps the *bookkeeping only*, in plain
 containers:
 
@@ -173,14 +173,14 @@ self._watchers: list = []             # callbacks to ring on revoke (see §6e)
 > one-of-a-kind, like a banknote's serial number. The `consumed` set is the list of serials
 > already cashed.
 
-**`fulfill()` — the one chain write, faked** ([fakes.py:77](../e2e/src/e2e/skeleton/fakes.py#L77)).
+**`fulfill()` — the one chain write, faked** ([fakes.py:89](../e2e/src/e2e/skeleton/fakes.py#L89)).
 This is the entire "money and ticket change hands" instant. Its shape is the lesson:
 
 ```mermaid
 flowchart TD
-    A["fulfill(signed, buyer=Ada)"] --> B{"salt already in<br/>consumed?"}
-    B -->|"yes"| R["raise OfferAlreadyUsed<br/>(STOP — nothing mutated)"]
-    B -->|"no"| C["add salt to consumed"]
+    A["fulfill(signed, buyer=Ada)"] --> B{"expired?<br/>wrong consumer?<br/>salt spent?<br/>can't pay?"}
+    B -->|"any yes"| R["raise OfferExpired /<br/>WrongConsumer / OfferAlreadyUsed /<br/>InsufficientFunds<br/>(STOP — nothing mutated)"]
+    B -->|"all no"| C["add salt to consumed"]
     C --> D["balances: Ada −10 TOK"]
     D --> E["balances: Bell +10 TOK"]
     E --> F["mint EntitlementView #7,<br/>owner = Ada"]
@@ -190,8 +190,15 @@ flowchart TD
 ```python
 def fulfill(self, signed, buyer):
     offer = signed.offer
-    if offer.salt in self.consumed:          # guard FIRST, before any change
+    if self._clock.now() > offer.valid_until:                 # ALL checks first,
+        raise OfferExpired(offer.valid_until)                 # in the order M1.3's
+    if int(offer.consumer, 16) != 0 and offer.consumer != buyer:  # contract will
+        raise WrongConsumer(buyer)                            # revert in
+    if offer.salt in self.consumed:
         raise OfferAlreadyUsed(offer.salt)
+    if self.balances.get(buyer, 0) < int(offer.price):
+        raise InsufficientFunds(buyer)
+    # checks done — nothing below can fail
     self.consumed.add(offer.salt)            # punch the serial
     self.balances[buyer] -= int(offer.price) # Ada pays
     self.balances[offer.provider] += int(offer.price)  # Bell receives
@@ -202,19 +209,23 @@ def fulfill(self, signed, buyer):
 ```
 
 > **Jargon: "atomic / all-or-nothing"** — either every effect happens or none does. The real
-> chain guarantees this with a transaction. The fake earns it with a **trick**: it checks the
-> salt *before touching anything*, so a rejected `fulfill` literally never reaches the lines
-> that move money. That single ordering is why [the replay test](../e2e/tests/test_lifecycle.py#L100)
-> can prove "Bell was paid once, not twice" — the second `fulfill` raises at the guard and the
-> world is untouched.
+> chain guarantees this with a transaction: a revert rolls back *every* storage write already
+> made, so the contract may check and mutate in any order. Python has no rollback, so the fake
+> earns atomicity with **ordering alone**: every check runs *before the first mutation*, and a
+> rejected `fulfill` literally never reaches the lines that move money. That ordering is why
+> [the replay test](../e2e/tests/test_lifecycle.py#L108) can prove "Bell was paid once, not
+> twice," and why the three deny-path tests
+> ([expired / targeted / underfunded](../e2e/tests/test_lifecycle.py#L175)) can each assert the
+> world is untouched. Those four tests are the parity spec M1.3's Foundry revert tests must
+> match, check for check.
 
 The **read side** is the `EntitlementReader` port the controller uses
-([fakes.py:116](../e2e/src/e2e/skeleton/fakes.py#L116)): `owner_of(id)` → the owner,
+([fakes.py:140](../e2e/src/e2e/skeleton/fakes.py#L140)): `owner_of(id)` → the owner,
 `get(id)` → the ticket, `chain_time()` → forwards to the clock, `watch_revoked(cb)` → files a
 callback. Note the controller never touches the clock directly; it asks *the chain* for the
 time, exactly as it will ask the real chain later.
 
-And `revoke()` ([fakes.py:107](../e2e/src/e2e/skeleton/fakes.py#L107)) — Bell cancelling a
+And `revoke()` ([fakes.py:131](../e2e/src/e2e/skeleton/fakes.py#L131)) — Bell cancelling a
 ticket — is a **flag flip, not a delete** (invariant I5: a revoked ticket still exists and is
 readable):
 
@@ -233,7 +244,7 @@ def revoke(self, id):
 
 ### 4c. `FakeNet` — a router that writes down what it was told
 
-[fakes.py:129](../e2e/src/e2e/skeleton/fakes.py#L129). A real router turns
+[fakes.py:153](../e2e/src/e2e/skeleton/fakes.py#L153). A real router turns
 `apply_bandwidth` into gNMI commands over the wire. The fake just **records the call** so a
 test can later check "did the controller really ask for 50 Mbps?":
 
@@ -289,7 +300,7 @@ real; only the *decision* is canned.
 
 ### 6a. The predicate — a pure decision
 
-[stub_controller.py:50](../e2e/src/e2e/skeleton/stub_controller.py#L50):
+[stub_controller.py:55](../e2e/src/e2e/skeleton/stub_controller.py#L55):
 
 ```python
 def predicate(view, owner, requester, now, active_ids) -> ErrorCode | None:
@@ -297,10 +308,17 @@ def predicate(view, owner, requester, now, active_ids) -> ErrorCode | None:
     if now < view.start_time:             return ErrorCode.E_NOT_STARTED
     if now >= view.end_time:              return ErrorCode.E_EXPIRED
     if view.revoked:                      return ErrorCode.E_REVOKED
-    if view.service_type not in (0, 1):   return ErrorCode.E_SCOPE
+    if view.service_type not in (0,):     return ErrorCode.E_SCOPE
     if view.id in active_ids:             return ErrorCode.E_CONFLICT
     return None                           # None == "all clear"
 ```
+
+Note the scope line: telemetry (serviceType 1) is a perfectly real service in docs/03, but v0's
+controller only knows `apply_bandwidth` — so the honest scope set is `(0,)`. Admitting a
+service the controller cannot deliver would pass the checklist and then crash mid-provision;
+the tuple widens when the telemetry translator exists (M3.3/M4.3). The deny order is also part
+of the contract — "who" is checked before state, so a revoked ticket shown by a non-owner
+reports `E_NOT_OWNER` (pinned by the `order_who_before_state` test).
 
 > **Jargon: "pure function"** — its answer depends *only* on its arguments, and it changes
 > nothing in the world (no clock, no chain, no files). Notice it never *fetches* anything:
@@ -309,7 +327,7 @@ def predicate(view, owner, requester, now, active_ids) -> ErrorCode | None:
 Why is purity worth insisting on?
 
 1. **Testable in microseconds.** [test_predicate.py](../e2e/tests/test_predicate.py) calls it
-   seven times — one accept, six named denials — with no blockchain in sight.
+   nine times — one accept, eight named denials — with no blockchain in sight.
 2. **It is the security core.** Authorization is "boring arithmetic," never creative AI. A
    predictable bouncer cannot be sweet-talked (rule 1).
 3. **It moves house unchanged.** At M4.1 this exact function is lifted into
@@ -320,7 +338,7 @@ allowed" — see §8.)
 
 ### 6b. `StubController.__init__` — wiring + one subtle line
 
-[stub_controller.py:87](../e2e/src/e2e/skeleton/stub_controller.py#L87):
+[stub_controller.py:92](../e2e/src/e2e/skeleton/stub_controller.py#L92):
 
 ```python
 def __init__(self, chain: EntitlementReader, net: NetworkProvisioner):
@@ -344,7 +362,7 @@ The last line wires the **observer pattern**: the controller gives the chain a c
 
 ### 6c. `activate()` — the bouncer doing the job
 
-[stub_controller.py:103](../e2e/src/e2e/skeleton/stub_controller.py#L103). Read it as
+[stub_controller.py:108](../e2e/src/e2e/skeleton/stub_controller.py#L108). Read it as
 **fetch → decide → act**:
 
 ```mermaid
@@ -388,12 +406,15 @@ That **fetch → decide → act** ordering is the architecture's spine: all I/O 
 decision in the middle, effects at the end. The real controller keeps exactly this shape.
 
 > **Jargon: a "nonce"** — a one-time word ("number used once"). `challenge()`
-> ([line 96](../e2e/src/e2e/skeleton/stub_controller.py#L96)) mints one; `activate()` requires
-> it and immediately burns it, so a recorded "I'm the owner" proof cannot be replayed.
+> ([line 101](../e2e/src/e2e/skeleton/stub_controller.py#L101)) mints one; `activate()` requires
+> it and immediately burns it, so a recorded "I'm the owner" proof cannot be replayed. Two v0
+> honesty notes: the nonce is not yet *bound* to a ticket or requester (a nonce issued for #7
+> would activate #8 — binding arrives with the signed proof at M4.2), and a set cannot tell
+> "reused" from "never issued", so both surface as `E_NONCE_REUSED` until M4.2's real store.
 > **Jargon: `Denied`** — a custom exception that *carries an `ErrorCode`*, so the caller (and
 > the test) sees exactly *why* the bouncer said no: `exc.value.code == ErrorCode.E_NOT_OWNER`.
 
-`_resolve` ([line 31](../e2e/src/e2e/skeleton/stub_controller.py#L31)) is the
+`_resolve` ([line 36](../e2e/src/e2e/skeleton/stub_controller.py#L36)) is the
 paper-to-physics translation — the ticket's abstract `resource_id` →
 `srl1, ethernet-1/1 → ethernet-1/2`. In v0 it is a one-entry dict standing in for the real
 `resource_map.yaml` (M4.3); it is the *only* place that knows topology, which is rule 6.
@@ -445,9 +466,9 @@ flowchart TB
     TD --> S["session → TORN_DOWN<br/>config removed from FakeNet"]
 ```
 
-`tick()` ([line 134](../e2e/src/e2e/skeleton/stub_controller.py#L134)) is **polling** — "wake,
+`tick()` ([line 141](../e2e/src/e2e/skeleton/stub_controller.py#L141)) is **polling** — "wake,
 read the clock, end anything past its `end_time`." `_on_revoked()`
-([line 143](../e2e/src/e2e/skeleton/stub_controller.py#L143)) is the **callback** from §6b
+([line 150](../e2e/src/e2e/skeleton/stub_controller.py#L150)) is the **callback** from §6b
 finally ringing; it re-reads the ticket before acting:
 
 ```python
@@ -463,7 +484,7 @@ def _on_revoked(self, entitlement_id):
 > is how bugs sneak in.
 
 Both funnel into one idempotent `teardown`
-([line 155](../e2e/src/e2e/skeleton/stub_controller.py#L155)) — which is *why* it had to be
+([line 162](../e2e/src/e2e/skeleton/stub_controller.py#L162)) — which is *why* it had to be
 idempotent. The session walks a tiny slice of the `SessionState` enum:
 
 ```mermaid
@@ -482,7 +503,7 @@ stateDiagram-v2
 
 ## 7. One concrete trace (real numbers, end to end)
 
-Walking [test_happy_path_lifecycle](../e2e/tests/test_lifecycle.py#L62) by hand:
+Walking [test_happy_path_lifecycle](../e2e/tests/test_lifecycle.py#L70) by hand:
 
 ```text
 _new_world():
@@ -495,7 +516,8 @@ quote()  → CANONICAL_SIGNED_OFFER  (price "10e18", capacity 50_000_000, salt 0
 decide() → DECISION_ACCEPT  (accept=True)                                   ✓ assert
 
 chain.fulfill(signed, Ada):
-   "0x…5A17" in consumed? no
+   checks: 13:32 ≤ validUntil ✓ · open offer (consumer=0) ✓ ·
+           "0x…5A17" in consumed? no ✓ · Ada 50e18 ≥ 10e18 ✓
    consumed = {"0x…5A17"}
    balances: Ada 50e18 − 10e18 = 40e18 ; Bell 0 + 10e18 = 10e18
    next_id 7 → mint #7, next_id becomes 8 ; _owners[7]=Ada
@@ -529,7 +551,7 @@ Every `✓` is a real assertion. That is the whole play, in cardboard.
 | Data **shapes** (`Offer`, `EntitlementView`, …) | **real** (pydantic, validated) | already real (M0.2) |
 | **Ports** & wiring (dependency injection) | **real** | already real (M0.2) |
 | The **predicate** logic | **real & pure** (lifts unchanged) | hardened M4.1 |
-| Settlement (`fulfill`, balances, single-use) | **faked** — a dict + early-return "atomicity" | M1.3 contract / M1.5 client |
+| Settlement (`fulfill`, balances, single-use) | **faked** — a dict; checks-before-mutation "atomicity" in M1.3's revert order | M1.3 contract / M1.5 client |
 | Signatures on the offer | **not checked** — `0xab…` placeholder | verified M1.3 / M1.5 |
 | Router provisioning | **faked** — records calls | M3.2–M3.4 (gNMI) |
 | The two AI decisions | **hard-coded** | M5.x (LLM) |

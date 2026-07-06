@@ -20,11 +20,16 @@ from a2a_interfaces import (
 )
 from a2a_interfaces.fixtures import RESOURCE_ID, RESOLVED_PATH
 
-# serviceType values this controller knows how to honor (docs/03 §4.2).
-_KNOWN_SERVICE_TYPES = (0, 1)  # 0 = bandwidth, 1 = telemetry
+# serviceType values this controller knows how to honor. Telemetry (1) is a real
+# serviceType (docs/03 §4.2) but activate() only knows apply_bandwidth, so admitting
+# it here would pass the predicate and then crash mid-provision; it joins the tuple
+# when the telemetry translator exists (M3.3/M4.3).
+_KNOWN_SERVICE_TYPES = (0,)  # 0 = bandwidth
 
 # Stand-in for controller/resource_map.yaml (rule 6 / ADR-005): the real
-# resourceId -> topology map arrives at M4.3. In v0 we know one path.
+# resourceId -> topology map arrives at M4.3. In v0 we know one path; an unmapped
+# resource_id is a raw KeyError — no ErrorCode names "unresolvable resource" yet,
+# and M4.3 decides whether that becomes E_SCOPE or a new code (v bump).
 _RESOURCE_MAP: dict[bytes, ResolvedPath] = {bytes.fromhex(RESOURCE_ID[2:]): RESOLVED_PATH}
 
 
@@ -106,6 +111,8 @@ class StubController:
         Raises Denied(ErrorCode) on any rejection. `requester` stands in for the
         address recovered from a signed proof; real recovery is M4.2.
         """
+        # A set can't tell "reused" from "never issued", so both surface as
+        # E_NONCE_REUSED here; M4.2's real nonce store separates them.
         if nonce not in self._open_nonces:
             raise Denied(ErrorCode.E_NONCE_REUSED)
         self._open_nonces.discard(nonce)  # burn it after one use

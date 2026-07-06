@@ -30,7 +30,15 @@ from a2a_interfaces.fixtures import (
     TICKET_ID,
     WINDOW,
 )
-from e2e.skeleton.fakes import FakeChain, FakeClock, FakeNet, OfferAlreadyUsed
+from e2e.skeleton.fakes import (
+    FakeChain,
+    FakeClock,
+    FakeNet,
+    InsufficientFunds,
+    OfferAlreadyUsed,
+    OfferExpired,
+    WrongConsumer,
+)
 from e2e.skeleton.scripted_agents import ScriptedConsumer, ScriptedProvider
 from e2e.skeleton.stub_controller import Denied, StubController
 
@@ -133,7 +141,7 @@ def test_revocation_tears_down_active_session():
 
 
 class _FailingNet(FakeNet):
-    """A provisii saw u created 3 files, but i didnt get fully what u did, no documentation, no narrative no examples, not shown how each specific piece of code serves a purpose, no visuals, go ahead and do that so i understand in detailoner whose apply_bandwidth refuses — the netctl-said-no joint."""
+    """A provisioner whose apply_bandwidth refuses — the netctl-said-no joint."""
 
     def apply_bandwidth(
         self, session_id: str, path: ResolvedPath, capacity_bps: int, qos_class: int
@@ -150,3 +158,49 @@ def test_activation_denied_when_provisioner_fails():
     with pytest.raises(Denied) as exc:
         controller.activate(eid, requester=ADA, nonce=controller.challenge(eid))
     assert exc.value.code == ErrorCode.E_NETWORK
+
+
+# --- fulfill deny paths: the parity spec M1.3's revert tests must match ------
+
+
+def _assert_fulfill_left_no_trace(chain: FakeChain, signed) -> None:
+    """The atomicity claim (I3, in cardboard): a rejected fulfill mutated nothing."""
+    assert signed.offer.salt not in chain.consumed
+    assert chain.balances[ADA] == SEED_TOK
+    assert chain.balances[BELL] == 0
+    with pytest.raises(KeyError):
+        chain.owner_of(TICKET_ID)  # nothing was minted
+
+
+def test_expired_offer_is_rejected():
+    clock, chain, _, _, provider, _ = _new_world()
+    signed = provider.quote(BANDWIDTH_NEED)
+
+    clock.advance(signed.offer.valid_until - chain.chain_time() + 1)  # one past validUntil
+    with pytest.raises(OfferExpired):
+        chain.fulfill(signed, buyer=ADA)
+    _assert_fulfill_left_no_trace(chain, signed)
+
+
+def test_targeted_offer_rejects_any_other_buyer():
+    _, chain, _, _, provider, _ = _new_world()
+    open_offer = provider.quote(BANDWIDTH_NEED)
+    # Bell writes Ada's name on the ticket: consumer != 0 binds the offer to her.
+    targeted = open_offer.model_copy(
+        update={"offer": open_offer.offer.model_copy(update={"consumer": ADA})}
+    )
+
+    with pytest.raises(WrongConsumer):
+        chain.fulfill(targeted, buyer=BELL)
+    _assert_fulfill_left_no_trace(chain, targeted)
+
+    assert chain.owner_of(chain.fulfill(targeted, buyer=ADA)) == ADA  # she can still buy it
+
+
+def test_underfunded_buyer_is_rejected():
+    _, chain, _, _, provider, _ = _new_world()  # Bell starts with 0 TOK
+    signed = provider.quote(BANDWIDTH_NEED)
+
+    with pytest.raises(InsufficientFunds):
+        chain.fulfill(signed, buyer=BELL)  # open offer, but Bell can't pay 10 TOK
+    _assert_fulfill_left_no_trace(chain, signed)

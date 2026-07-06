@@ -42,6 +42,18 @@ class OfferAlreadyUsed(Exception):
     """A salt has already been fulfilled. Mirrors the contract's revert at M1.3."""
 
 
+class OfferExpired(Exception):
+    """Chain time is past the offer's valid_until. Mirrors the contract's revert at M1.3."""
+
+
+class WrongConsumer(Exception):
+    """A targeted offer (consumer != 0) fulfilled by someone else. Mirrors M1.3."""
+
+
+class InsufficientFunds(Exception):
+    """The buyer cannot pay. On the real chain this is the ERC-20 transferFrom revert."""
+
+
 class FakeClock:
     """The chain clock you can advance. `now()` stands in for block.timestamp."""
 
@@ -75,19 +87,31 @@ class FakeChain:
     # --- write side: the one chain mutation, fulfill() ---------------------
 
     def fulfill(self, signed: SignedOffer, buyer: str) -> int:
-        """Punch the salt, move payment, mint the entitlement — all or nothing.
+        """Check everything, then punch the salt, move payment, mint — all or nothing.
 
-        Mirrors the contract's fulfill (M1.3): the buyer pays the provider and an
-        entitlement is minted to the buyer in one motion. "Atomic" here means the
-        Python sense — checks happen before any mutation, so a rejected fulfill
-        leaves the world untouched. Returns the new entitlement id.
+        Mirrors the contract's fulfill (M1.3), checking in the contract's planned
+        revert order: expired → consumer binding → salt → funds (signature checks
+        stay out — fakes don't verify). The real chain gets atomicity for free — a
+        revert rolls back every storage write in the transaction, whatever the
+        order. Python has no rollback, so this fake earns "all or nothing" by
+        ordering alone: every check precedes the first mutation, and a rejected
+        fulfill leaves the world untouched. Returns the new entitlement id.
         """
         offer = signed.offer
-        if offer.salt in self.consumed:  # checked before any mutation: all-or-nothing
+        if offer.service_type != 0:  # this fake decodes bandwidth params only
+            raise NotImplementedError("telemetry offers arrive with M3.3")
+        if self._clock.now() > offer.valid_until:
+            raise OfferExpired(offer.valid_until)
+        if int(offer.consumer, 16) != 0 and offer.consumer != buyer:
+            raise WrongConsumer(buyer)
+        if offer.salt in self.consumed:
             raise OfferAlreadyUsed(offer.salt)
+        if self.balances.get(buyer, 0) < int(offer.price):
+            raise InsufficientFunds(buyer)
+        # checks done — nothing below can fail, so mutation order no longer matters
         self.consumed.add(offer.salt)
-        self.balances[buyer] -= int(offer.price)
-        self.balances[offer.provider] += int(offer.price)
+        self.balances[buyer] = self.balances.get(buyer, 0) - int(offer.price)
+        self.balances[offer.provider] = self.balances.get(offer.provider, 0) + int(offer.price)
         entitlement_id = self._next_id
         self._next_id += 1
         self._owners[entitlement_id] = buyer

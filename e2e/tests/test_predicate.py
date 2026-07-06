@@ -42,9 +42,39 @@ MID = WINDOW.start + 1  # a chain time safely inside the window
             set(),
             ErrorCode.E_SCOPE,
         ),
+        (
+            # Telemetry is a real serviceType (docs/03 §4.2) but v0 can only provision
+            # bandwidth — the scope check must deny what activate() can't deliver.
+            VIEW.model_copy(update={"service_type": 1}),
+            ADA,
+            ADA,
+            MID,
+            set(),
+            ErrorCode.E_SCOPE,
+        ),
         (VIEW, ADA, ADA, MID, {VIEW.id}, ErrorCode.E_CONFLICT),
+        (
+            # The check ORDER is part of the contract: "who" precedes state, so a
+            # revoked ticket shown by a non-owner reports E_NOT_OWNER, not E_REVOKED.
+            VIEW.model_copy(update={"revoked": True}),
+            ADA,
+            BELL,
+            MID,
+            set(),
+            ErrorCode.E_NOT_OWNER,
+        ),
     ],
-    ids=["accept", "not_owner", "not_started", "expired", "revoked", "scope", "conflict"],
+    ids=[
+        "accept",
+        "not_owner",
+        "not_started",
+        "expired",
+        "revoked",
+        "scope",
+        "telemetry_not_honored_yet",
+        "conflict",
+        "order_who_before_state",
+    ],
 )
 def test_predicate(view, owner, requester, now, active_ids, expected):
     assert predicate(view, owner, requester, now, active_ids) == expected
