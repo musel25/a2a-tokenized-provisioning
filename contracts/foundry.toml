@@ -4,3 +4,10 @@ out = "out"
 libs = ["lib"]
 solc = "0.8.30" # pinned (CLAUDE.md convention): same compiler everywhere, forever
 remappings = ["@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/"]
+# hashOffer's 13-word abi.encode (typehash + 12 Offer fields) is stack-too-deep on
+# UNOPTIMIZED legacy codegen; the optimizer relieves the pressure, so this flag is
+# load-bearing, and it lets the hash stay a literal transcription of the EIP-712 struct
+# instead of a hand-split encode. (via_ir would also fix it, structurally, but costs
+# accurate source maps in forge traces — too dear in a learn-by-poking repo. If a future
+# edit re-trips stack-too-deep even with the optimizer, switch to via_ir then.)
+optimizer = true

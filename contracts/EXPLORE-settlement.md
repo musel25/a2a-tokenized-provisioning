@@ -150,8 +150,10 @@ the same thing `test_I6_termsSurviveTransfer` asserts in-EVM.
 ## Experiments to try
 
 - Mint twice, then `ownerOf(2)` — predict the id before you read it.
-- Try to find a public mint on the *real* contract: `cast interface $ADDR` then look — there
-  is none. That absence is I1.
+- Look for a way to mint on the *real* contract: `cast interface $ADDR` then read the list.
+  Since M1.3 there is exactly **one** function that can create a ticket — `fulfill`, which
+  demands payment and a provider signature first. A free, unconditional mint still doesn't
+  exist. That single guarded door is I1 (see [`EXPLORE-fulfill.md`](EXPLORE-fulfill.md)).
 - Transfer #1 again from Carol's key (anvil acct2) — and from Ada's (now not the owner): one
   succeeds, one reverts. Why?
 - `forge inspect src/Settlement.sol:A2ASettlement abi` — the ABI M1.5's Python will load.
