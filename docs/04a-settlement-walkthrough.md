@@ -3,12 +3,16 @@
 > **The one-sentence answer:** `A2ASettlement` is a program that lives on a blockchain and
 > acts as the **public, tamper-proof registry of service "tickets"** — for every ticket it
 > records *what it grants* and *who owns it*, so a network gatekeeper can later trust the
-> answer to "does Ada own a valid 50 Mbps ticket?"
+> answer to "does Ada own a valid 50 Mbps ticket?" — and (since M1.3) it is also the
+> **cashier**: the one function that sells a ticket, `fulfill`, takes the payment and mints
+> the ticket in a single indivisible step.
 >
 > **Audience:** never written Solidity. Every term is glossed on first use. The runnable
-> companion is [`contracts/EXPLORE-settlement.md`](../contracts/EXPLORE-settlement.md); the
-> terse invariant list is [`docs/04-contract-spec.md`](04-contract-spec.md); the code is
-> [`contracts/src/Settlement.sol`](../contracts/src/Settlement.sol) (68 lines).
+> companions are [`contracts/EXPLORE-settlement.md`](../contracts/EXPLORE-settlement.md)
+> (storage + ownership) and [`contracts/EXPLORE-fulfill.md`](../contracts/EXPLORE-fulfill.md)
+> (the purchase, and four ways to fail it); the terse invariant list is
+> [`docs/04-contract-spec.md`](04-contract-spec.md); the code is
+> [`contracts/src/Settlement.sol`](../contracts/src/Settlement.sol).
 
 ---
 
@@ -158,17 +162,90 @@ lives in the ERC-721 ledger, terms live in the struct, and they are independent.
 the owner flips to Carol while *every term stays identical*. That exact property is invariant
 **I6**, pinned by [`test_I6_termsSurviveTransfer`](../contracts/test/Settlement.t.sol).
 
-## 8. See it — or break it — yourself
+## 8. The purchase (M1.3): how a signed promise becomes a ticket
 
-- **See it:** [`contracts/EXPLORE-settlement.md`](../contracts/EXPLORE-settlement.md) — start a
-  local chain, create ticket #7, read its terms straight off the chain, transfer it, watch the
-  owner flip while the terms don't.
-- **Break it:** in [`_issue`](../contracts/src/Settlement.sol#L55), change `issuer: issuer` to
-  `issuer: msg.sender`, then run `forge test`. Watch `test_issueStoresAllEightFieldsVerbatim`
-  go red — proof the test really checks that *Bell* is recorded as the issuer. Then revert.
+Everything so far explained the *registry*. But how does a ticket get **sold**? Ada and
+Bell are strangers on a network — Bell won't ship first, Ada won't pay first. The answer is
+the vending machine move (story ch. 4): make payment and delivery **one indivisible step**,
+so neither party can be left holding nothing.
+
+**Step 1 — Bell signs an offer, off-chain.** An *offer* is twelve fields of data (who
+sells, to whom, what service, which path, the window, which token, what price, a quote
+deadline `validUntil`, a serial number `salt`, a fingerprint of the fine print). Bell runs
+it through **EIP-712** — the Ethereum standard for signing *structured* data — and produces
+a 65-byte **signature** with his secret key. Two things make this more than a scribble:
+
+- The hash Bell signs includes a **domain**: *("A2AProvisioning", version "0", chain 31337,
+  this contract's address)*. The same offer signed for a different chain or a different
+  contract hashes differently — the signature only works in its home. That is anti-replay
+  armor you get for free.
+- From (hash, signature) anyone can *recover the signer's address* — a piece of EVM math
+  called `ecrecover`. No account system, no password: the math is the authentication.
+
+Note what did **not** happen: no transaction, no fee, the chain is unaware. An unsigned
+offer is a rumor; a signed one is a redeemable promise sitting in a JSON file.
+
+**Step 2 — Ada redeems it, on-chain.** Ada first `approve`s the settlement contract to
+pull 10 TOK from her (ERC-20 payment is *pull*-based: you grant an **allowance**, the
+contract collects). Then she calls the one public door:
+
+```solidity
+fulfill(offer, signature)   // Settlement.sol — the cashier
+```
+
+which runs a fixed pipeline — the same order, every time, for everyone:
+
+1. **Is the quote still fresh?** `block.timestamp > validUntil` → refuse (`OfferExpired`).
+2. **Is Ada the intended buyer?** If the offer names a consumer and it isn't the caller →
+   refuse (`WrongConsumer`). (`0x0` = open offer, first come first served.)
+3. **Was this promise already redeemed?** A ledger *in the contract's own storage* —
+   `consumed[digest]` — remembers every punched stub. Already true → refuse
+   (`OfferAlreadyUsed`). This is invariant **I2**: one promise, one redemption, enforced
+   where every future buyer can see it, not in Bell's private database.
+4. **Did Bell really sign these exact bytes?** Recover the signer from the signature; not
+   `offer.provider` → refuse (`BadSignature`). Change *any* field — price, megabits,
+   window — and recovery yields a stranger. Tampering is not "caught", it is
+   *mathematically impossible to miss*.
+5. **All checks pass:** punch the stub, pull 10 TOK from Ada to Bell, and `_issue` the
+   ticket (yes — the same `internal` printer from §4(c); `fulfill` is its only production
+   caller, which completes invariant **I1**). Two events announce it: `OfferConsumed`,
+   `EntitlementMinted`.
+
+**The magic is what happens on failure.** If *anything* reverts — say Ada never approved
+the 10 TOK — the EVM rolls back **every** storage write of the transaction, including the
+stub punched in step 5 before the payment ran. No ticket, no payment, salt still fresh, as
+if nothing happened. That all-or-nothing is invariant **I3**, and it is *why* payment and
+mint must live in one transaction rather than two cooperating ones.
+
+**One deliberate non-check:** `fulfill` never looks at `startTime`/`endTime`. Buying at
+13:45 for the 14:00 window is normal commerce; deciding whether the window is *currently
+usable* is the controller's job at activation time (M4), against chain time.
+
+**Where's the money itself?** A second, tiny contract: [`MockTOK`](../contracts/src/MockTOK.sol)
+— a standard ERC-20 token (the fungible cousin of ERC-721: interchangeable units, balances
+instead of unique ids) with an open `faucet` because it is stage money for the lab. The
+settlement never holds TOK; it moves it straight buyer → provider.
+
+## 9. See it — or break it — yourself
+
+- **See it (storage + ownership):** [`contracts/EXPLORE-settlement.md`](../contracts/EXPLORE-settlement.md) —
+  create ticket #7, read its terms off the chain, transfer it, watch the owner flip while
+  the terms don't.
+- **See it (the purchase):** [`contracts/EXPLORE-fulfill.md`](../contracts/EXPLORE-fulfill.md) —
+  *be* Bell and Ada: sign a real offer with `cast`, redeem it, then replay it, underfund it,
+  tamper with it, and let it expire — four refusals, each with its named error.
+- **Break it:** in [`fulfill`](../contracts/src/Settlement.sol), swap the two lines
+  `consumed[digest] = true;` and the `safeTransferFrom(...)` call, then run `forge test`.
+  Everything stays green — the EVM's rollback makes the order irrelevant for I3 — but now
+  read the comment above those lines and `test_revertOrder_usedSaltWinsOverBadSignature`
+  to see the *other* reason the punch comes first (a reentrant token trying the same offer
+  twice mid-flight). Then revert.
 
 ---
 
-**Check question:** When ticket #7 is stored, two different parts of the contract hold two
-different facts — "the terms are 50 Mbps, 14:00–16:00" and "Ada is the owner." Which part
-holds which, and why is it *useful* that they live separately?
+**Check questions:** (1) When ticket #7 is stored, two different parts of the contract hold
+two different facts — "the terms are 50 Mbps, 14:00–16:00" and "Ada is the owner." Which
+part holds which, and why is it *useful* that they live separately? (2) Walk the six
+effects of a successful `fulfill` (stub punched, TOK moved, ticket minted, owner stamped,
+two events) and say what happens to each one if the payment pull reverts — and *why* that
+answer needs no code at all.
