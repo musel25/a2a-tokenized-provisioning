@@ -15,6 +15,7 @@ isn't deployed; the chain/controller/agent lanes are always live.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import threading
 import time
@@ -61,6 +62,9 @@ class Console:
     lab_ip: str | None = None
     sessions: dict[int, str] = field(default_factory=dict)  # entitlement_id → session_id
     last_service: str = "bandwidth"  # what the most recent provision bought (drives teardown view)
+    llm: object = None  # LLMClient once the endpoint answers; judgment slots use it
+    llm_model: str = ""
+    llm_status: str = "off"  # off | warming | up | down — surfaced in the header pill
     _nonce: int = 100  # bumped per provision so each offer has a fresh salt (single-use, I2)
     _lock: threading.Lock = field(default_factory=threading.Lock)
 
@@ -74,7 +78,27 @@ class Console:
             "anvil_available": anvil_available(),
             "sessions": {str(k): v for k, v in self.sessions.items()},
             "chain_time": self.reader.chain_time() if self.reader else None,
+            "llm": {"status": self.llm_status, "model": self.llm_model},
         }
+
+    def warm_llm(self) -> None:
+        """Probe — and thereby WARM — the configured LLM endpoint, in the background at
+        server start. A scale-to-zero Modal container takes ~60 s to boot, so paying that
+        here moves the wait out of the demo. Judgment falls back to the deterministic
+        stand-ins whenever this hasn't succeeded (the demo never requires the network)."""
+        if not _llm_enabled():
+            self.llm_status = "off"
+            return
+        from agents.llm import LLMClient, LLMConfig, llm_up
+
+        cfg = LLMConfig.from_env()
+        self.llm_model = cfg.model
+        self.llm_status = "warming"
+        if llm_up(cfg, timeout=240.0):
+            self.llm = LLMClient(cfg)
+            self.llm_status = "up"
+        else:
+            self.llm_status = "down"
 
     def ensure_started(self, emit: Emit) -> None:
         with self._lock:
@@ -120,8 +144,9 @@ class Console:
                 if c:
                     c.close()
             if self.provisioner:
-                for eid in list(self.sessions):
-                    self.provisioner.teardown(f"ent{eid}")
+                for sid in self.sessions.values():
+                    if sid:  # the ACTUAL session id (e.g. "ent7-a0") — names the router config
+                        self.provisioner.teardown(sid)
                 self.provisioner.close()
             if self.anvil:
                 self.anvil.stop()
@@ -139,7 +164,8 @@ class Console:
         buy, says so, then runs the pipeline. The interpretation is an LLM call when one
         is fast enough; otherwise a deterministic parse stands in (same result)."""
         emit(_chat("you", text))
-        intent = _parse_intent(text)
+        client = self.llm if self.llm_status == "up" else None
+        intent = _parse_intent(text, client)
         emit(_chat("Ada", f"On it — I'll buy **{intent['label']}** (budget {intent['budget']} TOK). "
                           f"{intent['why']}"))
         self.provision(intent["service"], intent["budget"], emit)
@@ -148,29 +174,32 @@ class Console:
         self.ensure_started(emit)
         self.last_service = service
         self._nonce += 1  # a fresh salt each click — every offer is single-use (I2)
-        offer = self._offer_for(service, self._nonce)
         need = _need_for(service)
         eid = None
         try:
-            # 1. AGENT — discovery + quote (A2A) and judgment (the LLM slot, shown)
+            # 1. AGENT — discovery + quote (A2A); the two judgment slots (rule 1) run on
+            # the real LLM when the endpoint is warm, deterministic stand-ins when not.
             emit(_stage("agent", "Agents negotiate"))
             emit(_a2a("Ada", "Bell", f"quote_{service}",
                       f"need {service} · {_mbps(need)} · window 14:00–16:00",
                       expand=_a2a_out(service, need)))
-            price = int(offer.offer.price) // 10**18 if service == "bandwidth" else 8
+            price, quote_note = self._bell_quote(service, need, emit)
+            if price is None:  # Bell's judgment: decline for a business reason
+                emit(_decision("Bell", False, quote_note))
+                emit(_done(False, f"Bell declined to quote — {quote_note}"))
+                return
+            offer = self._offer_for(service, self._nonce, price)
             emit(_mcp("Bell", "chainmcp", "sign_offer",
                       f"{service} @ {price} TOK", "EIP-712 signature (65 bytes)",
                       expand={"server": "chainmcp (Bell's key custody)", "tool": "sign_offer",
                               "args": {"offer": _clip(offer.offer.model_dump(mode="json"))},
                               "result": {"signature": offer.signature}}))
-            emit(_a2a("Bell", "Ada", "signed_offer", f"{price} TOK · signed",
+            emit(_a2a("Bell", "Ada", "signed_offer", f"{price} TOK · {quote_note}",
                       expand=_a2a_reply(offer)))
-            accept = price <= budget_tok
-            emit(_decision("Ada", accept,
-                           f"{price} TOK {'≤' if accept else '>'} budget {budget_tok} TOK — "
-                           f"{'accept' if accept else 'decline'}"))
+            accept, reason = self._ada_decide(need, offer, budget_tok, emit)
+            emit(_decision("Ada", accept, reason))
             if not accept:
-                emit(_done(False, "Ada declined — over budget. Nothing purchased."))
+                emit(_done(False, "Ada declined. Nothing purchased."))
                 return
 
             # 2. CHAIN — settle: MCP fulfill → real on-chain tx, ticket, payment
@@ -253,6 +282,46 @@ class Console:
             emit(_done(True, f"Ticket #{eid} revoked. Throughput returned to unshaped."))
         except Exception as err:  # noqa: BLE001
             emit(_ev("error", "chain", "Revoke failed", str(err)[:200]))
+
+    # --- the two judgment slots (rule 1: the ONLY places LLM output matters) --
+
+    def _bell_quote(self, service: str, need, emit: Emit) -> tuple[int | None, str]:
+        """Bell prices the quote. Live LLM → a real judgment (prices vary run to run);
+        otherwise the canonical list price. Returns (price_tok, note) or (None, reason)."""
+        canonical = 10 if service == "bandwidth" else 8
+        if self.llm_status != "up":
+            return canonical, "canonical list price (deterministic stand-in)"
+        emit(_ev("thinking", "agent", "Bell is pricing…", f"real judgment · {self.llm_model}"))
+        try:
+            from agents.provider_graph import QuoteDecision
+
+            out = self.llm.structured(
+                "You are Bell, a network-service provider pricing one quote. Capacity is "
+                f"confirmed available; your canonical list price is {canonical} TOK. Quote "
+                "a fair whole-TOK price between 5 and 25, or decline for a business reason.",
+                f"NEED: {need.model_dump_json()}",
+                QuoteDecision,
+            )
+            if not out.quote:
+                return None, f"{out.reason} · judged by {self.llm_model}"
+            return max(1, min(40, out.price_tok)), f"priced by {self.llm_model}: {out.reason}"
+        except Exception as err:  # noqa: BLE001 — judgment may fail; commerce falls back, never crashes
+            return canonical, f"canonical list price (LLM fallback: {type(err).__name__})"
+
+    def _ada_decide(self, need, offer, budget_tok: int, emit: Emit) -> tuple[bool, str]:
+        """Ada judges the signed offer — the real `agents.decision.decide` when the LLM
+        is live (schema-guarded; declines safely on garbage), else the budget check."""
+        price = int(offer.offer.price) // 10**18
+        if self.llm_status != "up":
+            accept = price <= budget_tok
+            return accept, (f"{price} TOK {'≤' if accept else '>'} budget {budget_tok} TOK — "
+                            f"{'accept' if accept else 'decline'} (deterministic stand-in)")
+        emit(_ev("thinking", "agent", "Ada is judging the offer…",
+                 f"real judgment · {self.llm_model}"))
+        from agents.decision import decide
+
+        out = decide(self.llm, need, offer, budget_tok)
+        return out.accept, f"{out.reason} · judged by {self.llm_model}"
 
     def _ticket_view(self, eid: int) -> dict:
         """The NFT as the panel shows it — owner from ownerOf, everything else decoded from
@@ -360,8 +429,14 @@ _TELEMETRY = {
 }
 
 
-def _parse_intent(text: str) -> dict:
-    return _llm_intent(text) or _keyword_intent(text)
+def _llm_enabled() -> bool:
+    """The judgment slots go live when either flag is set (A2A_LIVE_LLM matches the
+    agents' live-test convention; A2A_CHAT_LLM predates it and still works)."""
+    return os.environ.get("A2A_LIVE_LLM") == "1" or os.environ.get("A2A_CHAT_LLM") == "1"
+
+
+def _parse_intent(text: str, client=None) -> dict:
+    return (_llm_intent(text, client) if client else None) or _keyword_intent(text)
 
 
 def _keyword_intent(text: str) -> dict:
@@ -383,27 +458,19 @@ def _keyword_intent(text: str) -> dict:
     return base
 
 
-def _llm_intent(text: str) -> dict | None:
-    """The real-agent path: an LLM reads the request and picks the product. Opt-in
-    (A2A_CHAT_LLM=1) because local models on a small box answer too slowly to feel like
-    chat; the deterministic parse stands in by default with the same result."""
-    import os
-
-    if os.environ.get("A2A_CHAT_LLM") != "1":
-        return None
+def _llm_intent(text: str, client) -> dict | None:
+    """The real-agent path: the live LLM reads the request and picks the product. The
+    Console gates this on a warm endpoint (`llm_status == "up"`); any failure falls back
+    to the keyword parse with the same result shape."""
     try:
-        from agents.llm import LLMClient, ollama_up
         from pydantic import BaseModel
-
-        if not ollama_up():
-            return None
 
         class Intent(BaseModel):
             service: str  # "bandwidth" or "telemetry"
             budget_tok: int
             reasoning: str
 
-        out = LLMClient().structured(
+        out = client.structured(
             system=("You route a network-buyer's request to ONE product. bandwidth = a "
                     "guaranteed data rate through the router. telemetry = the right to "
                     "configure the router to export monitoring to a collector. Pick a "
@@ -566,7 +633,8 @@ def _predicate_checks(view, now: int, owner: str) -> list[dict]:
     ]
 
 
-def _telemetry_offer(bell: ChainClient, nonce: int, collector_endpoint: str) -> object:
+def _telemetry_offer(bell: ChainClient, nonce: int, collector_endpoint: str,
+                     price_tok: int) -> object:
     params = eth_abi.encode(
         ["string[]", "string", "uint32"],
         [TELEMETRY_NEED.sensor_paths, collector_endpoint, TELEMETRY_NEED.sample_interval_s],
@@ -580,7 +648,7 @@ def _telemetry_offer(bell: ChainClient, nonce: int, collector_endpoint: str) -> 
         start_time=WINDOW.start,
         end_time=WINDOW.end,
         payment_token=MOCK_TOK,
-        price=str(8 * 10**18),
+        price=str(price_tok * 10**18),
         valid_until=WINDOW.end,
         salt="0x" + f"{0x7E000 + nonce:064x}",
         terms_hash=TERMS_HASH,
@@ -612,13 +680,16 @@ def _iperf() -> dict:
 
 
 # bind the offer builder onto Console (needs bell + a per-click nonce for a fresh salt)
-def _console_offer_for(self: Console, service: str, nonce: int):
+def _console_offer_for(self: Console, service: str, nonce: int, price_tok: int):
     if service == "bandwidth":
-        offer = CANONICAL_OFFER.model_copy(update={"salt": "0x" + f"{0x5A000 + nonce:064x}"})
+        offer = CANONICAL_OFFER.model_copy(update={
+            "salt": "0x" + f"{0x5A000 + nonce:064x}",
+            "price": str(price_tok * 10**18),  # Bell's judgment sets the price when live
+        })
         return self.bell.sign_offer(offer)
     # telemetry: the offer names Ada's collector; the ticket buys the right to write a
     # gNMI export destination to the router pointing there (ADR-007).
-    return _telemetry_offer(self.bell, nonce, TELEMETRY_NEED.collector_endpoint)
+    return _telemetry_offer(self.bell, nonce, TELEMETRY_NEED.collector_endpoint, price_tok)
 
 
 Console._offer_for = _console_offer_for

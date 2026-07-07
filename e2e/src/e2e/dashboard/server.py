@@ -51,6 +51,10 @@ def _run(target, *args) -> None:
 def build_app() -> FastAPI:
     app = FastAPI(title="a2a operator console")
 
+    # Warm the LLM endpoint (if configured) while the operator is still reading the page —
+    # a scale-to-zero Modal container boots in ~60 s and this hides it. No-op when off.
+    threading.Thread(target=CONSOLE.warm_llm, daemon=True).start()
+
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:
         return (HERE / "console.html").read_text()

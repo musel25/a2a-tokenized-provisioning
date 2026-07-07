@@ -343,6 +343,18 @@ Each entry is the same pattern as the steps above; only the *reason* is new.
   signature tests spawn a live `anvil` and load forge-built ABIs — without Foundry those
   tests skip, and the one seam nothing else can catch would go unwatched in CI.
 
+**Post-plan — the deployed LLM (`llmserve/`, ADR-001 amendment).**
+- Root gains a `llm` dependency group (`uv add --group llm modal`) — Modal is deploy
+  tooling, not a runtime dependency of any package.
+- One-time: `uv run modal setup` (browser auth), then
+  `uv run modal secret create a2a-llm-key LLM_API_KEY=$(openssl rand -hex 16)`.
+- `uv run modal deploy llmserve/modal_llm.py` → an OpenAI-compatible vLLM at
+  `https://<workspace>--a2a-llm-serve.modal.run/v1` (Qwen3-4B on an L4; weights and the
+  torch.compile cache live in Modal volumes so cold starts are ~60 s, not ~5 min).
+- The Justfile gains `set dotenv-load := true`; a gitignored `.env` (template:
+  `.env.example`) carries `LLM_BASE_URL`/`LLM_MODEL`/`LLM_API_KEY` + `A2A_LIVE_LLM=1`.
+  No `.env` → the console's deterministic stand-ins; nothing else changes.
+
 ---
 
 ## Verify the whole skeleton

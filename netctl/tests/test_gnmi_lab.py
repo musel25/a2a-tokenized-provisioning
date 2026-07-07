@@ -102,13 +102,15 @@ def test_one_call_configures_telemetry_export_on_the_device():
         )
         assert result.ok, result.detail
 
-        # the config really landed — read it back off the router
-        dests = provisioner.telemetry_config("srl1")
-        assert any(d["name"] == f"a2a-{session}" for d in dests), dests
-        assert dests[0]["address"] == "10.0.0.50" and dests[0]["port"] == 57400
+        # the config really landed — read OUR destination back off the router (other a2a
+        # sessions may coexist on the shared lab; assert only on this test's name)
+        mine = [d for d in provisioner.telemetry_config("srl1") if d["name"] == f"a2a-{session}"]
+        assert mine, provisioner.telemetry_config("srl1")
+        assert mine[0]["address"] == "10.0.0.50" and mine[0]["port"] == 57400
 
         assert provisioner.teardown(session).ok
-        assert provisioner.telemetry_config("srl1") == []  # removed from the device
+        left = [d for d in provisioner.telemetry_config("srl1") if d["name"] == f"a2a-{session}"]
+        assert left == []  # OUR config removed from the device
         assert provisioner.teardown(session).ok  # idempotent (rule 8)
     finally:
         provisioner.close()
