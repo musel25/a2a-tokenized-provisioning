@@ -1,0 +1,43 @@
+# The flight simulator (story ch. 6): one SR Linux router between two Linux hosts.
+#
+#   hostA (10.10.1.10) ── e1-1 ┤ srl1 ├ e1-2 ── hostB (10.10.2.10)
+#                    10.10.1.1 ┘      └ 10.10.2.1
+#
+# srl1 routes between the two /24s; hostA→hostB traffic MUST transit the router —
+# that's the whole point, it's where M2.2's policer and M2.3's telemetry live.
+# The router boots with interface addressing only (srl1-init.cli); everything a
+# milestone *teaches* (QoS, gNMI) is applied live, never baked in — docs/07 has
+# the recipes.
+#
+# Deploy (no sudo needed here: SUID containerlab + clab_admins membership):
+#   containerlab deploy -t netlab/topology.clab.yml
+name: a2a
+
+topology:
+  nodes:
+    srl1:
+      kind: nokia_srlinux
+      image: ghcr.io/nokia/srlinux:latest # ~2 GB RAM, allow ~1 min to boot
+      # NOT `startup-config:` — its overlay mechanism breaks under sudoless (SUID)
+      # containerlab ("/tmp/clab-overlay-config: No such file or directory").
+      # Same effect, sturdier plumbing: mount the CLI file, replay it after boot.
+      binds:
+        - srl1-init.cli:/tmp/srl1-init.cli:ro
+      exec:
+        - bash -c '{ echo "enter candidate"; grep -v "^#" /tmp/srl1-init.cli; echo "commit now"; } | sr_cli'
+    hostA:
+      kind: linux
+      image: ghcr.io/hellt/network-multitool # has iperf3 (M2.2's measuring tape)
+      exec:
+        - ip address add 10.10.1.10/24 dev eth1
+        - ip route add 10.10.2.0/24 via 10.10.1.1
+    hostB:
+      kind: linux
+      image: ghcr.io/hellt/network-multitool
+      exec:
+        - ip address add 10.10.2.10/24 dev eth1
+        - ip route add 10.10.1.0/24 via 10.10.2.1
+
+  links:
+    - endpoints: ["srl1:e1-1", "hostA:eth1"]
+    - endpoints: ["srl1:e1-2", "hostB:eth1"]
