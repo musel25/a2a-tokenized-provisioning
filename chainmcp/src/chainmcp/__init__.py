@@ -4,6 +4,7 @@ M1.5 ships the client; the MCP server wrapper arrives at M5.4.
 """
 
 from .client import ChainClient, ChainRevert
+from .reader import ChainReader
 from .signing import (
     ACTIVATION_PROOF_TEMPLATE,
     OFFER_TYPES,
@@ -17,6 +18,7 @@ from .signing import (
 __all__ = [
     "ACTIVATION_PROOF_TEMPLATE",
     "ChainClient",
+    "ChainReader",
     "ChainRevert",
     "OFFER_TYPES",
     "activation_proof_message",
