@@ -391,7 +391,7 @@ dial-in (collector connects to router). So `apply_telemetry` either (a) runs a s
 provider-side forwarder: subscribe to the router, relay samples to the consumer's
 collector endpoint, or (b) requires the consumer's collector to dial in directly (then
 "activation" = opening access + handing connection details). Default leaning: (a) — it
-keeps the consumer's experience "samples arrive at my endpoint". Decide → ADR-006.*
+keeps the consumer's experience "samples arrive at my endpoint". Decide → ADR-007 (the ADR-006 slot went to the lab-datapath decision made in M2.2).*
 
 - **M3.1 pygnmi smoke.** A 30-line script: connect (skip-verify), Get an interface
   oper-status, Set a description, Get it back. *Explain-back:* what is the YANG path and
@@ -403,7 +403,7 @@ keeps the consumer's experience "samples arrive at my endpoint". Decide → ADR-
   promote it here, and write **one shared contract-test suite that runs against both**
   (mock parity = same behavior at the port). *Validate:* the M2.2 iperf evidence,
   reproduced by a single function call; `pytest netctl/` green for both implementations.
-- **M3.3 Telemetry provisioning.** Implement per ADR-006. *Validate:* one call → a dummy
+- **M3.3 Telemetry provisioning.** Implement per ADR-007. *Validate:* one call → a dummy
   collector (netcat or 20-line asyncio server) prints samples at the interval; teardown
   stops them.
 - **M3.4 Skeleton v2.** Profile `chain+net`: FakeNet → GnmiProvisioner. The lifecycle test
@@ -503,7 +503,7 @@ memory (ADR-002).*
 | end of Phase 0 | `02-architecture.md` (draw what runs) |
 | start of Phase 1 | `04-contract-spec.md` (invariants → tests) |
 | Phase 2 (continuously) | `07-netlab.md` (topology + the two manual recipes) |
-| start of Phase 3 | ADR-006 telemetry delivery model |
+|  start of Phase 3 | ADR-007 telemetry delivery model |
 | start of Phase 4 | `05-controller-spec.md` |
 | start of Phase 5 | `06-agents-spec.md` + version pins |
 | Phase 6 | `08-demo-dashboard.md` finalized · `09-test-plan.md` = the evidence index |
