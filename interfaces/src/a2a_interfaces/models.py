@@ -229,6 +229,26 @@ class TeardownRequest(_Frozen):
     session_id: str
 
 
+# --- Dashboard events (§8) — components append; the dashboard tails ---------
+
+
+class DashboardEvent(_Frozen):
+    """One thing that happened, for the live run view (docs/03 §8, ADR-003).
+
+    Every component appends these as JSONL to `e2e/runs/<ts>/events.jsonl`; the
+    dashboard tails the file. `trust_domain` places the event in one of the three
+    columns (chain / controller / network — who is trusted to have done it);
+    `narration` is the epilogue sentence shown literally on the stepper.
+    """
+
+    v: Literal[0] = 0
+    ts: int  # chain time when it happened (ADR-004), unix seconds
+    step: str  # the lifecycle step, e.g. "fulfill", "activate", "revoke", "teardown"
+    trust_domain: Literal["chain", "controller", "network", "agent"]
+    narration: str  # a human sentence — the story, literally
+    detail: dict[str, Any] = {}
+
+
 # --- LLM decision (§6.3): the only judgment slot ---------------------------
 
 

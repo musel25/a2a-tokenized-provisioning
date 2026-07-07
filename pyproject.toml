@@ -12,6 +12,7 @@ members = ["interfaces", "e2e", "chainmcp", "netctl", "controller", "agents"]
 demo = [
     "ipykernel>=7.3.0",
     "nbconvert>=7.17.1",
+    "streamlit>=1.38",
 ]
 dev = [
     "pytest>=8.0",

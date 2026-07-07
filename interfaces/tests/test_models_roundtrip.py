@@ -64,3 +64,17 @@ def test_telemetry_sample_roundtrips():
     again = TelemetrySample.model_validate_json(sample.model_dump_json())
     assert again == sample
     assert again.v == 0
+
+
+def test_dashboard_event_roundtrips():
+    from a2a_interfaces import DashboardEvent
+
+    event = DashboardEvent(
+        ts=1757944800,
+        step="revoke",
+        trust_domain="chain",
+        narration="Bell revokes #7 — throughput dies mid-window",
+        detail={"entitlement_id": 7},
+    )
+    again = DashboardEvent.model_validate_json(event.model_dump_json())
+    assert again == event and again.v == 0
