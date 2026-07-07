@@ -30,7 +30,9 @@ dependencies = [
     { name = "agents" },
     { name = "chainmcp" },
     { name = "controller" },
+    { name = "httpx" },
     { name = "netctl" },
+    { name = "uvicorn" },
 ]
 
 [package.metadata]
@@ -39,7 +41,9 @@ requires-dist = [
     { name = "agents", editable = "agents" },
     { name = "chainmcp", editable = "chainmcp" },
     { name = "controller", editable = "controller" },
+    { name = "httpx", specifier = ">=0.27" },
     { name = "netctl", editable = "netctl" },
+    { name = "uvicorn", specifier = ">=0.30" },
 ]
 
 [[package]]
