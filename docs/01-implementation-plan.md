@@ -41,15 +41,22 @@ documented in the same commit).
 
 ---
 
+> **Status update (2026-07-07): the plan is complete — all milestones M0.1 → M6.5 are
+> landed, each with a green CI run and a `docs/evidence/M<id>.md`.** The four skeleton
+> versions were reached in order; skeleton v4 (real agents drive everything) is the
+> system. Environment caveats recorded in the relevant evidence: the shared box serves
+> the LLM at ~140 s/decision (M5.1/M5.6 live runs are opt-in, contract proven
+> deterministically); demo *recording* (M6.5) is the one inherently-manual step.
+
 ## B. The backbone: skeleton versions
 
 | Version | What's real | What's fake | Reached at |
 |---|---|---|---|
-| **v0** | the lifecycle itself, the interfaces | chain, network, controller logic minimal, agents scripted | end of Phase 0 |
-| **v1** | + contracts on Anvil, Python chain client | network, agents; controller still the stub | end of Phase 1 |
-| **v2** | + real SR Linux lab via netctl | agents; controller still the stub | end of Phase 3 |
-| **v3** | + the real controller (predicate, auth, translators, watcher) | agents (decisions scripted) | end of Phase 4 |
-| **v4** | + LLM agents, MCP tools, A2A discovery — **the system** | nothing | end of Phase 5 |
+| **v0** | the lifecycle itself, the interfaces | chain, network, controller logic minimal, agents scripted | end of Phase 0 ✓ |
+| **v1** | + contracts on Anvil, Python chain client | network, agents; controller still the stub | end of Phase 1 ✓ |
+| **v2** | + real SR Linux lab via netctl | agents; controller still the stub | end of Phase 3 ✓ |
+| **v3** | + the real controller (predicate, auth, translators, watcher) | agents (decisions scripted) | end of Phase 4 ✓ |
+| **v4** | + LLM agents, MCP tools, A2A discovery — **the system** | nothing | end of Phase 5 ✓ |
 
 The skeleton lifecycle test runs in CI forever, in `mock` profile. Profiles select adapters:
 `SKELETON_PROFILE = mock | chain | chain+net | full` (real profiles run locally; CI runs
