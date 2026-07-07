@@ -23,6 +23,17 @@ def qos_interface(subinterface: str) -> str:
     return f"/qos/interfaces/interface[interface-id={subinterface}]"
 
 
+# --- telemetry export config (the right the telemetry ticket buys, ADR-007) --
+# SR Linux's gNMI dial-out: configure the router to export toward a collector. Writing
+# this IS honoring the telemetry ticket — symmetric with installing a policer.
+
+TELEMETRY_DESTINATIONS = "/system/grpc-tunnel"
+
+
+def telemetry_destination(name: str) -> str:
+    return f"/system/grpc-tunnel/destination[name={name}]"
+
+
 # --- interface state / telemetry (docs/07 §7) --------------------------------
 
 

@@ -56,24 +56,21 @@ def test_teardown_of_unknown_session_succeeds(provisioner):
 
 
 def test_apply_telemetry_then_teardown_roundtrip(provisioner):
+    """The telemetry ticket is the right to configure telemetry export on the device
+    (ADR-007): apply writes a real export destination, teardown removes it."""
     from a2a_interfaces.fixtures import TELEMETRY_NEED
     from a2a_interfaces.models import ResolvedNode
-    from netctl.testing import DummyCollector
 
-    collector = DummyCollector()  # the gnmi leg really dials this endpoint
-    try:
-        result = provisioner.apply_telemetry(
-            SESSION,
-            ResolvedNode(device="srl1"),
-            TELEMETRY_NEED.sensor_paths,
-            collector.endpoint,
-            TELEMETRY_NEED.sample_interval_s,
-        )
-        assert result.ok, result.detail
-        assert provisioner.teardown(SESSION).ok
-        assert provisioner.teardown(SESSION).ok  # telemetry teardown idempotent too
-    finally:
-        collector.stop()
+    result = provisioner.apply_telemetry(
+        SESSION,
+        ResolvedNode(device="srl1"),
+        TELEMETRY_NEED.sensor_paths,
+        "10.0.0.50:57400",
+        TELEMETRY_NEED.sample_interval_s,
+    )
+    assert result.ok, result.detail
+    assert provisioner.teardown(SESSION).ok
+    assert provisioner.teardown(SESSION).ok  # telemetry teardown idempotent too (rule 8)
 
 
 def test_unknown_device_is_a_loud_error():

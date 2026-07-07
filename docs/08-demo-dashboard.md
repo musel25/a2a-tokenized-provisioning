@@ -19,17 +19,29 @@ containerlab deploy -t netlab/topology.clab.yml   # the SR Linux lab (~1 min) �
 just console                                       # → http://127.0.0.1:8099
 ```
 
-Open the console and press **“Ada, get me this.”** It drives the *real* pipeline —
-Ada's agent negotiates with Bell over A2A, pays on-chain (real EIP-712, real ERC-721,
-real tx hash), the controller authorizes, and a real policer lands on srl1 — and shows
-it as a **trust relay**: the request lights up each domain (agents → chain → controller →
-network) as it crosses it. The **device inspector** reads srl1's live config off the
-router and iperf measures the enforced throughput (~49 Mbps). Toggle **Telemetry** for
-the second service type (samples stream to a live collector). Then hit **Revoke** and
-watch the relay's signal get *cut at the chain* and the throughput jump back to 100 Mbps.
+**Chat to Ada's agent** — type a request ("get me 50 Mbps under 12 TOK", or "buy the right
+to configure telemetry export on srl1"). The agent reads the intent, picks the product,
+and drives the *real* pipeline: it negotiates with Bell over A2A, pays on-chain (real
+EIP-712, real ERC-721, real tx hash), the controller authorizes, and a real config lands
+on srl1 — shown as a **trust relay** where what Ada bought lights up each domain
+(agents → chain → controller → network) as it crosses it.
 
-Without the lab the console still runs everything real except the router lane, which says
-so honestly. Events are the same `DashboardEvent` JSONL the file-tailing view uses.
+Two products, and the console makes the distinction the point — both are *the right to
+write one config to the router*:
+
+- **Bandwidth** → a rate **policer** (`/qos`). The inspector reads it back off srl1 and
+  iperf measures the enforced throughput (~49 Mbps).
+- **Telemetry** → a **dial-out export destination** (`/system/grpc-tunnel`). The token is
+  the *right to configure telemetry export on the device*; the inspector shows the
+  `grpc-tunnel destination` the controller wrote, read straight off the router.
+
+Then **Revoke**: the relay's signal is *cut at the chain*, the break propagates to the
+router, and the config is removed (bandwidth throughput jumps back to 100 Mbps; the
+telemetry export destination is deleted from srl1).
+
+The chat interpretation is deterministic by default (fast); set `A2A_CHAT_LLM=1` to route
+it through the real LLM agent (slower on a small box). Without the lab the console still
+runs everything real except the router lane, which says so honestly.
 
 ## The file-tailing view (headless / no browser)
 
@@ -63,14 +75,16 @@ blockchain.
 The same run continues into telemetry — and the point is *how little changed*:
 
 ```
-apply_telemetry (network) forwarder: srl1 counters → Ada's collector
-  telemetry: 2 samples arrived at the collector
+apply_telemetry (network) gNMI Set: telemetry export destination on srl1 → Ada's collector
+  telemetry: export a2a-demo-tel configured on srl1
 ```
 
-Same controller, same auth, same session machine, same provisioner object — only the
-translator (`translate_bandwidth` → `translate_telemetry`) and the one provisioner call
-differ. That delta *is* a thesis result: the architecture generalizes across products
-for the cost of one translator.
+The telemetry ticket is the *right to configure telemetry export on the device*
+(ADR-007): the controller writes a `grpc-tunnel destination` to srl1 — symmetric with the
+bandwidth policer. Same controller, same auth, same session machine, same provisioner
+object — only the translator (`translate_bandwidth` → `translate_telemetry`) and the one
+provisioner call differ (a different config subtree). That delta *is* a thesis result: the
+architecture generalizes across products for the cost of one translator.
 
 ### Beat 3 — the revocation finale (M4.5, the jury-gold moment)
 

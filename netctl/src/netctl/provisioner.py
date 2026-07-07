@@ -18,7 +18,6 @@ from a2a_interfaces import ApplyResult, ResolvedNode, ResolvedPath
 
 from . import paths
 from .connect import GnmiTarget, connect
-from .forwarder import TelemetryForwarder
 
 # 20 ms of burst at 50 Mbps ≈ 125 KB — the M2.2 lab value; enough for TCP to breathe,
 # small enough that the plateau stays crisp.
@@ -39,7 +38,6 @@ class GnmiProvisioner:
         # gNMI CONNECTIONS (60/min) — a dial-per-operation adapter locks itself out
         # under any real load. Not thread-safe; the controller serializes (v0).
         self._clients: dict[str, object] = {}
-        self._forwarders: dict[str, TelemetryForwarder] = {}  # telemetry session state
 
     # --- NetworkProvisioner (docs/03 §5) ------------------------------------
 
@@ -96,30 +94,29 @@ class GnmiProvisioner:
         collector_endpoint: str,
         sample_interval_s: int,
     ) -> ApplyResult:
-        """ADR-007: start a provider-side forwarder — router → consumer's endpoint.
-
-        Telemetry sessions are PROCESS state (the router holds no per-session config;
-        the subscription dies with the forwarder), so unlike bandwidth this teardown
-        does not survive a restart — the honest v0 trade recorded in the ADR.
+        """ADR-007: the telemetry ticket is the RIGHT to configure telemetry export on
+        the device. Honor it by writing a real gNMI-dial-out destination to the router
+        (SR Linux `grpc-tunnel destination`) pointing at the consumer's collector — the
+        router will export toward it. This is symmetric with `apply_bandwidth`: the
+        token authorizes a config write, the config lives ON the device (readable back),
+        and teardown removes it (stateless, rule 8) — no provider-side forwarder process.
         """
-        if session_id in self._forwarders:
-            return ApplyResult(ok=True, detail="already forwarding (idempotent apply)")
+        name = _template_name(session_id)
+        host, _, port = collector_endpoint.rpartition(":")
+        destination = {
+            "address": host or "0.0.0.0",
+            "port": int(port) if port.isdigit() else 57400,
+            "network-instance": "mgmt",
+        }
         try:
-            gnmi_target = self._targets[target.device]
-        except KeyError as err:
-            return ApplyResult(ok=False, detail=f"no gNMI target for device {err}")
-        forwarder = TelemetryForwarder(
-            session_id, gnmi_target, sensor_paths, collector_endpoint, sample_interval_s
-        )
-        try:
-            forwarder.start()
+            self._client(target.device).set(
+                update=[(paths.telemetry_destination(name), destination)], encoding="json_ietf"
+            )
         except Exception as err:  # noqa: BLE001 — the port reports, callers decide
-            return ApplyResult(ok=False, detail=f"forwarder failed to start: {err}")
-        self._forwarders[session_id] = forwarder
+            return ApplyResult(ok=False, detail=f"gNMI Set failed: {err}")
         return ApplyResult(
             ok=True,
-            detail=f"forwarding {len(sensor_paths)} path(s) from {target.device} "
-            f"to {collector_endpoint} every {sample_interval_s}s",
+            detail=f"telemetry export {name} @ {target.device} → {collector_endpoint}",
         )
 
     def teardown(self, session_id: str) -> ApplyResult:
@@ -130,16 +127,12 @@ class GnmiProvisioner:
         second call, or a call after a process restart, is the same success (rule 8).
         """
         removed: list[str] = []
-        forwarder = self._forwarders.pop(session_id, None)
-        if forwarder is not None:
-            forwarder.stop()
-            removed.append("telemetry forwarder")
-
         name = _template_name(session_id)
         for device in self._targets:
             try:
                 client = self._client(device)
                 deletes = self._session_config_on(client, name)
+                deletes += self._session_telemetry_on(client, name)
                 if deletes:
                     client.set(delete=deletes, encoding="json_ietf")
                     removed.append(device)
@@ -157,11 +150,7 @@ class GnmiProvisioner:
         return True
 
     def close(self) -> None:
-        """Stop every forwarder and drop every cached connection; idempotent. The
-        provisioner reconnects lazily if used again (forwarders do NOT auto-restart)."""
-        for forwarder in self._forwarders.values():
-            forwarder.stop()
-        self._forwarders.clear()
+        """Drop every cached gNMI connection; idempotent. Reconnects lazily if reused."""
         for client in self._clients.values():
             try:
                 client.close()
@@ -205,6 +194,33 @@ class GnmiProvisioner:
                 if template.get("name") == template_name:
                     deletes.append(paths.policer_template(template_name))
         return deletes
+
+    def _session_telemetry_on(self, client, name: str) -> list[str]:
+        """The telemetry-export destinations this session installed (found on the
+        router, so teardown is stateless — rule 8)."""
+        deletes: list[str] = []
+        cfg = client.get(
+            path=[paths.TELEMETRY_DESTINATIONS], encoding="json_ietf", datatype="config"
+        )
+        for update in cfg["notification"][0].get("update") or []:
+            for dest in _denamespace(update["val"] or {}).get("destination", []):
+                if dest.get("name") == name:
+                    deletes.append(paths.telemetry_destination(name))
+        return deletes
+
+    def telemetry_config(self, device: str) -> list[dict]:
+        """Every a2a telemetry-export destination currently on the router (for the
+        inspector) — read live off the device, like the policer readout."""
+        client = self._client(device)
+        cfg = client.get(
+            path=[paths.TELEMETRY_DESTINATIONS], encoding="json_ietf", datatype="config"
+        )
+        out = []
+        for update in cfg["notification"][0].get("update") or []:
+            for dest in _denamespace(update["val"] or {}).get("destination", []):
+                if dest.get("name", "").startswith("a2a-"):
+                    out.append(dest)
+        return out
 
 
 def _denamespace(node):
