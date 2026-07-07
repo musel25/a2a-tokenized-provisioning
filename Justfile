@@ -1,7 +1,14 @@
-# Recipes grow with the milestones; `just up` / `just down` arrive in Phase 6.
-
 default:
     @just --list
+
+# bring up the chain-only stack (Anvil → deploy → controller), block until healthy.
+# The SR Linux lab is separate (containerlab deploy) + SKELETON_PROFILE=chain+net.
+up:
+    uv run python -m e2e.bringup
+
+# stop whatever `up` started (reads e2e/runs/current.json); idempotent.
+down:
+    uv run python -m e2e.bringup down
 
 # run all Python tests (mock profile)
 test:
