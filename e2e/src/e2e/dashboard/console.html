@@ -1,0 +1,399 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>a2a · operator console</title>
+<style>
+  :root{
+    --ink:#0A0E17; --panel:#111726; --panel-2:#0E1420; --line:#1E2A3D; --line-2:#2A3B54;
+    --text:#E6EDF7; --muted:#7C8CA6; --faint:#4A5A74;
+    --agent:#8B7BF0; --chain:#E0A93B; --controller:#3BC5D6; --network:#4FD98A; --revoke:#F0556B;
+    --mono:'JetBrains Mono','SFMono-Regular',ui-monospace,'Cascadia Code',Menlo,Consolas,monospace;
+    --display:'Space Grotesk','Inter Tight',system-ui,-apple-system,'Segoe UI',sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(59,197,214,.06), transparent 60%),
+      radial-gradient(900px 500px at 10% 110%, rgba(139,123,240,.06), transparent 60%),
+      var(--ink);
+    color:var(--text); font-family:var(--mono); font-size:13px; line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  /* faint oscilloscope graticule */
+  body::before{
+    content:""; position:fixed; inset:0; pointer-events:none; z-index:0; opacity:.5;
+    background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);
+    background-size:48px 48px; mask-image:radial-gradient(circle at 50% 40%, #000 30%, transparent 85%);
+  }
+  .wrap{position:relative; z-index:1; max-width:1320px; margin:0 auto; padding:20px 22px 40px}
+
+  header{display:flex; align-items:baseline; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:6px}
+  h1{font-family:var(--display); font-weight:600; font-size:19px; letter-spacing:.14em; text-transform:uppercase; margin:0}
+  h1 .dot{color:var(--network)}
+  .sub{color:var(--muted); font-size:11.5px; letter-spacing:.06em}
+  .pills{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+  .pill{display:inline-flex; gap:7px; align-items:center; border:1px solid var(--line-2);
+    padding:5px 10px; border-radius:999px; color:var(--muted); font-size:11px; letter-spacing:.05em; background:var(--panel-2)}
+  .pill b{color:var(--text); font-weight:500}
+  .led{width:7px; height:7px; border-radius:50%; background:var(--faint); box-shadow:0 0 0 0 transparent}
+  .led.on{background:var(--network); box-shadow:0 0 10px var(--network)}
+  .led.off{background:var(--revoke)}
+
+  /* ── control bar ─────────────────────────────────────────── */
+  .control{display:grid; grid-template-columns:1.3fr auto auto; gap:14px; align-items:stretch;
+    margin:14px 0 18px}
+  .card{background:linear-gradient(180deg,var(--panel),var(--panel-2)); border:1px solid var(--line);
+    border-radius:14px; padding:14px 16px}
+  .card h2{font-family:var(--display); font-size:10.5px; letter-spacing:.18em; text-transform:uppercase;
+    color:var(--muted); margin:0 0 12px; font-weight:600}
+  .seg{display:inline-flex; border:1px solid var(--line-2); border-radius:10px; overflow:hidden; margin-bottom:12px}
+  .seg button{background:transparent; color:var(--muted); border:0; padding:8px 16px; font-family:var(--mono);
+    font-size:12.5px; cursor:pointer; letter-spacing:.03em}
+  .seg button.sel{background:rgba(139,123,240,.14); color:var(--text); box-shadow:inset 0 0 0 1px rgba(139,123,240,.4)}
+  .row{display:flex; align-items:center; gap:12px}
+  .slider{flex:1; display:flex; align-items:center; gap:10px}
+  input[type=range]{-webkit-appearance:none; appearance:none; width:100%; height:4px; border-radius:2px;
+    background:var(--line-2); outline:none}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; width:15px; height:15px; border-radius:50%;
+    background:var(--agent); cursor:pointer; box-shadow:0 0 10px rgba(139,123,240,.6); border:2px solid var(--ink)}
+  .budget{color:var(--text); min-width:74px; text-align:right}
+  .go{margin-top:12px; width:100%; padding:11px; border-radius:11px; cursor:pointer;
+    font-family:var(--display); font-weight:600; letter-spacing:.05em; font-size:13px;
+    color:#0a0f16; background:linear-gradient(180deg,#9d8ff5,#8B7BF0); border:0}
+  .go:hover{filter:brightness(1.08)}
+  .go:disabled{opacity:.45; cursor:not-allowed; filter:grayscale(.4)}
+  .btn{width:100%; padding:11px; border-radius:11px; cursor:pointer; font-family:var(--display); font-weight:600;
+    letter-spacing:.05em; font-size:13px; background:transparent; color:var(--revoke);
+    border:1px solid rgba(240,85,107,.45)}
+  .btn:hover{background:rgba(240,85,107,.12)}
+  .btn:disabled{opacity:.4; cursor:not-allowed}
+  .btn.ghost{color:var(--muted); border-color:var(--line-2)}
+  .btn.ghost:hover{background:rgba(124,140,166,.1); color:var(--text)}
+  .hint{color:var(--faint); font-size:10.5px; margin-top:8px; letter-spacing:.03em}
+
+  /* ── the relay ───────────────────────────────────────────── */
+  .relay-wrap{margin:6px 0 20px}
+  .relay-title{display:flex; align-items:center; gap:10px; margin-bottom:12px}
+  .relay-title .k{font-family:var(--display); font-size:10.5px; letter-spacing:.2em; text-transform:uppercase; color:var(--muted)}
+  .relay-title .n{color:var(--faint); font-size:11px}
+  .relay{display:flex; align-items:stretch; gap:0}
+  .station{flex:1; background:var(--panel-2); border:1px solid var(--line); border-radius:14px; padding:14px;
+    position:relative; transition:border-color .3s, box-shadow .3s, transform .3s; min-width:0}
+  .station .glyph{font-size:20px; line-height:1}
+  .station .name{font-family:var(--display); font-weight:600; letter-spacing:.14em; text-transform:uppercase;
+    font-size:11px; margin:8px 0 2px}
+  .station .who{color:var(--muted); font-size:10.5px; letter-spacing:.04em; margin-bottom:10px}
+  .station .state{font-size:11.5px; color:var(--text); min-height:34px}
+  .station .state .sm{color:var(--muted); font-size:10.5px; word-break:break-all}
+  .station[data-d=agent]{--c:var(--agent)} .station[data-d=chain]{--c:var(--chain)}
+  .station[data-d=controller]{--c:var(--controller)} .station[data-d=network]{--c:var(--network)}
+  .station .name, .station .glyph{color:var(--c)}
+  .station.active{border-color:var(--c); box-shadow:0 0 0 1px var(--c), 0 8px 30px -12px var(--c); transform:translateY(-2px)}
+  .station.done{border-color:color-mix(in oklab, var(--c) 45%, var(--line))}
+  .station .badge{position:absolute; top:12px; right:12px; font-size:9.5px; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--faint)}
+  .station.active .badge{color:var(--c)}
+  .conn{width:46px; align-self:center; height:3px; position:relative; margin:0 -1px; flex:0 0 46px}
+  .conn::before{content:""; position:absolute; inset:0; background:var(--line-2); border-radius:2px}
+  .conn.flow::after{content:""; position:absolute; inset:0; border-radius:2px;
+    background:linear-gradient(90deg,transparent, var(--fc,#4FD98A), transparent);
+    background-size:220% 100%; animation:flow 1.1s linear infinite}
+  .conn.cut::before{background:var(--revoke); box-shadow:0 0 12px var(--revoke)}
+  .conn.cut::after{content:"✕"; position:absolute; top:-9px; left:50%; transform:translateX(-50%);
+    color:var(--revoke); font-size:13px}
+  @keyframes flow{from{background-position:120% 0} to{background-position:-120% 0}}
+
+  /* ── bottom split ────────────────────────────────────────── */
+  .split{display:grid; grid-template-columns:1.15fr .85fr; gap:16px}
+  .stream{height:340px; overflow-y:auto; padding:4px 4px 4px 0}
+  .stream::-webkit-scrollbar{width:8px} .stream::-webkit-scrollbar-thumb{background:var(--line-2); border-radius:4px}
+  .ev{display:grid; grid-template-columns:56px 1fr; gap:10px; padding:8px 10px; border-radius:9px; margin-bottom:4px;
+    border-left:2px solid var(--line-2); background:rgba(255,255,255,.012); animation:pop .25s ease}
+  @keyframes pop{from{opacity:0; transform:translateX(-6px)} to{opacity:1}}
+  .ev .tag{font-size:9px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); padding-top:2px}
+  .ev .body .t{font-size:12px; color:var(--text)}
+  .ev .body .d{font-size:10.5px; color:var(--muted); word-break:break-word}
+  .ev.k-a2a{border-left-color:var(--agent)} .ev.k-a2a .tag{color:var(--agent)}
+  .ev.k-mcp{border-left-color:var(--agent)} .ev.k-mcp .tag{color:color-mix(in oklab,var(--agent) 70%, #fff 30%)}
+  .ev.k-decision{border-left-color:var(--agent); background:rgba(139,123,240,.06)}
+  .ev.k-chain_tx{border-left-color:var(--chain)} .ev.k-chain_tx .tag{color:var(--chain)}
+  .ev.k-chain_read{border-left-color:color-mix(in oklab,var(--chain) 50%, var(--line))} .ev.k-chain_read .tag{color:var(--chain)}
+  .ev.k-predicate{border-left-color:var(--controller)} .ev.k-predicate .tag{color:var(--controller)}
+  .ev.k-session,.ev.k-teardown{border-left-color:var(--controller)} .ev.k-session .tag,.ev.k-teardown .tag{color:var(--controller)}
+  .ev.k-device,.ev.k-iperf{border-left-color:var(--network)} .ev.k-device .tag,.ev.k-iperf .tag{color:var(--network)}
+  .ev.k-done{border-left-color:var(--network); background:rgba(79,217,138,.06)}
+  .ev.k-error{border-left-color:var(--revoke); background:rgba(240,85,107,.08)} .ev.k-error .tag{color:var(--revoke)}
+  .ev.k-stage{opacity:.75; border-left-color:var(--faint)} .ev.k-stage .tag{color:var(--faint)}
+  .chk{display:inline-block; margin-right:6px; font-size:10px}
+  .chk.ok{color:var(--network)} .chk.no{color:var(--revoke)}
+  .hash{color:var(--chain)}
+
+  /* device inspector */
+  .insp .kv{display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px dashed var(--line);
+    font-size:11.5px}
+  .insp .kv b{color:var(--text); font-weight:500}
+  .insp .kv .m{color:var(--muted)}
+  .gauge{margin:14px 0 6px}
+  .gauge .lab{display:flex; justify-content:space-between; font-size:10px; color:var(--faint); letter-spacing:.06em; margin-bottom:6px}
+  .gauge .track{position:relative; height:26px; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; overflow:hidden}
+  .gauge .fill{position:absolute; inset:0 auto 0 0; width:0; border-radius:8px 0 0 8px; transition:width .8s cubic-bezier(.2,.8,.2,1);
+    background:linear-gradient(90deg,rgba(79,217,138,.35),var(--network))}
+  .gauge .fill.shaped{background:linear-gradient(90deg,rgba(224,169,59,.3),var(--chain))}
+  .gauge .limit{position:absolute; top:-3px; bottom:-3px; width:2px; background:var(--revoke); left:50%; opacity:.8}
+  .gauge .limit::after{content:"ticket 50"; position:absolute; top:-16px; left:-24px; font-size:9px; color:var(--revoke); white-space:nowrap}
+  .gauge .val{position:absolute; right:8px; top:50%; transform:translateY(-50%); font-size:12px; color:var(--text)}
+  .idle{color:var(--faint); font-size:11px; text-align:center; padding:24px 0}
+  .offline{color:var(--chain); font-size:11px; border:1px dashed rgba(224,169,59,.4); border-radius:9px; padding:10px; margin-top:10px}
+  code{color:var(--controller)}
+  @media(max-width:1000px){ .control{grid-template-columns:1fr} .split{grid-template-columns:1fr} .relay{flex-wrap:wrap} .conn{display:none} .station{flex:1 1 45%} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>a2a <span class="dot">·</span> tokenized provisioning</h1>
+      <div class="sub">agents buy network services from each other — payment is a ticket, a ticket is enforcement</div>
+    </div>
+    <div class="pills">
+      <span class="pill"><span class="led" id="led-anvil"></span>chain</span>
+      <span class="pill"><span class="led" id="led-lab"></span>router</span>
+      <span class="pill">chain&nbsp;time <b id="ct">—</b></span>
+      <span class="pill"><span class="led on"></span>live</span>
+    </div>
+  </header>
+
+  <section class="control">
+    <div class="card">
+      <h2>Ada requests a service</h2>
+      <div class="seg" id="svc">
+        <button data-s="bandwidth" class="sel">Bandwidth · 50 Mbps</button>
+        <button data-s="telemetry">Telemetry · 10s</button>
+      </div>
+      <div class="row slider">
+        <span class="m" style="color:var(--muted)">budget</span>
+        <input type="range" id="budget" min="1" max="30" value="15" />
+        <span class="budget"><b id="budgetv">15</b> TOK</span>
+      </div>
+      <button class="go" id="go">Ada, get me this →</button>
+      <div class="hint">Ada's agent discovers Bell, negotiates over A2A, pays on-chain, and activates.</div>
+    </div>
+
+    <div class="card">
+      <h2>Bell's kill switch</h2>
+      <div class="state" style="color:var(--muted); font-size:11.5px; min-height:52px" id="revoke-state">
+        No active ticket yet. Provision a service, then Bell can revoke it mid-window.
+      </div>
+      <button class="btn" id="revoke" disabled>Revoke ticket ✕</button>
+      <div class="hint">One on-chain transaction. Watch the throughput die.</div>
+    </div>
+
+    <div class="card" style="display:flex; flex-direction:column; justify-content:space-between">
+      <div>
+        <h2>Session</h2>
+        <div class="state" id="sess" style="color:var(--muted); font-size:11.5px">idle</div>
+      </div>
+      <button class="btn ghost" id="reset">Reset stack</button>
+    </div>
+  </section>
+
+  <section class="relay-wrap">
+    <div class="relay-title"><span class="k">the trust relay</span>
+      <span class="n">a request for bandwidth crosses four trust domains — watch who does what</span></div>
+    <div class="relay" id="relay">
+      <div class="station" data-d="agent" id="st-agent">
+        <span class="badge">judgment</span><div class="glyph">◆</div>
+        <div class="name">Agents</div><div class="who">Ada · Bell — the only LLMs</div>
+        <div class="state" id="stt-agent"><span class="sm">idle</span></div>
+      </div>
+      <div class="conn" id="c1"></div>
+      <div class="station" data-d="chain" id="st-chain">
+        <span class="badge">settlement</span><div class="glyph">◈</div>
+        <div class="name">Chain</div><div class="who">Anvil · ERC-721 ticket</div>
+        <div class="state" id="stt-chain"><span class="sm">idle</span></div>
+      </div>
+      <div class="conn" id="c2"></div>
+      <div class="station" data-d="controller" id="st-controller">
+        <span class="badge">authority</span><div class="glyph">▚</div>
+        <div class="name">Controller</div><div class="who">deterministic · no LLM</div>
+        <div class="state" id="stt-controller"><span class="sm">idle</span></div>
+      </div>
+      <div class="conn" id="c3"></div>
+      <div class="station" data-d="network" id="st-network">
+        <span class="badge">enforcement</span><div class="glyph">≋</div>
+        <div class="name">Network</div><div class="who">SR Linux srl1 · gNMI</div>
+        <div class="state" id="stt-network"><span class="sm">idle</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="split">
+    <div class="card">
+      <h2>Event stream — A2A · MCP · chain</h2>
+      <div class="stream" id="stream"><div class="idle">Press “Ada, get me this” to begin.</div></div>
+    </div>
+    <div class="card insp">
+      <h2>Device inspector — srl1</h2>
+      <div id="insp-body"><div class="idle">No enforcement yet.</div></div>
+    </div>
+  </section>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+let service = 'bandwidth', running = false;
+
+// controls
+$('#svc').addEventListener('click', e => {
+  const b = e.target.closest('button'); if(!b) return;
+  service = b.dataset.s;
+  [...$('#svc').children].forEach(x => x.classList.toggle('sel', x===b));
+});
+$('#budget').addEventListener('input', e => $('#budgetv').textContent = e.target.value);
+$('#go').addEventListener('click', () => {
+  resetRelay();
+  fetch(`/api/provision/${service}?budget=${$('#budget').value}`, {method:'POST'});
+});
+$('#revoke').addEventListener('click', () => fetch('/api/revoke', {method:'POST'}));
+$('#reset').addEventListener('click', () => { fetch('/api/reset', {method:'POST'}); location.reload(); });
+
+// status poll
+async function poll(){
+  try{
+    const s = await (await fetch('/api/status')).json();
+    $('#led-anvil').className = 'led ' + (s.anvil ? 'on':'');
+    $('#led-lab').className = 'led ' + (s.lab ? 'on': (s.anvil ? 'off':''));
+    if(s.chain_time){ const d=new Date(s.chain_time*1000);
+      $('#ct').textContent = d.toISOString().slice(11,16); }
+  }catch(e){}
+}
+setInterval(poll, 2000); poll();
+
+// relay helpers
+const conns = ['c1','c2','c3'], order = ['agent','chain','controller','network'];
+const fcol = {agent:'#8B7BF0', chain:'#E0A93B', controller:'#3BC5D6', network:'#4FD98A'};
+function resetRelay(){
+  order.forEach(d=>{ $('#st-'+d).classList.remove('active','done');
+    $('#stt-'+d).innerHTML='<span class="sm">idle</span>'; });
+  conns.forEach(c=>{ const el=$('#'+c); el.className='conn'; });
+  $('#stream').innerHTML=''; $('#insp-body').innerHTML='<div class="idle">No enforcement yet.</div>';
+}
+function stage(domain){
+  const i = order.indexOf(domain);
+  order.forEach((d,j)=>{ const st=$('#st-'+d);
+    st.classList.toggle('active', j===i); st.classList.toggle('done', j<i); });
+  // flow the current up to the active station
+  conns.forEach((c,j)=>{ const el=$('#'+c);
+    if(el.classList.contains('cut')) return;
+    el.className = 'conn' + (j < i ? ' flow' : '');
+    el.style.setProperty('--fc', fcol[domain]);
+  });
+}
+function setStation(domain, main, sub){
+  $('#stt-'+domain).innerHTML = `${main}${sub?`<br><span class="sm">${sub}</span>`:''}`;
+}
+function cutRelay(){ // the revocation break at the chain, propagating right
+  ['c1','c2','c3'].forEach(c=>{ const el=$('#'+c); if(c!=='c1') el.className='conn cut'; else el.className='conn'; });
+  $('#st-chain').classList.add('active');
+}
+
+// event stream
+function addEv(e){
+  const s=$('#stream'); if(s.querySelector('.idle')) s.innerHTML='';
+  const div=document.createElement('div'); div.className='ev k-'+e.kind;
+  const tag = ({a2a:'a2a',mcp:'mcp',decision:'judge',chain_tx:'chain',chain_read:'read',
+    predicate:'check',session:'ctrl',teardown:'ctrl',device:'dev',iperf:'iperf',done:'done',
+    error:'error',stage:'—',boot:'boot'})[e.kind] || e.kind;
+  let detail = e.detail||'';
+  if(e.kind==='chain_tx' && e.tx_hash) detail = detail.replace(e.tx_hash.slice(0,18), `<span class="hash">${e.tx_hash.slice(0,18)}</span>`);
+  if(e.kind==='predicate') detail = e.checks.map(c=>`<span class="chk ${c.ok?'ok':'no'}">${c.ok?'✓':'✗'}</span>${c.name}`).join(' ');
+  div.innerHTML = `<div class="tag">${tag}</div><div class="body"><div class="t">${e.title||''}</div><div class="d">${detail}</div></div>`;
+  s.appendChild(div); s.scrollTop = s.scrollHeight;
+}
+
+// device inspector
+function renderDevice(state){
+  const b=$('#insp-body');
+  if(!state || state.online===false){
+    b.innerHTML = `<div class="offline">Router offline. The controller still authorized on-chain ownership — start the lab to watch the policer land:<br><code>containerlab deploy -t netlab/topology.clab.yml</code></div>`;
+    return;
+  }
+  if(state.mode==='telemetry'){
+    b.innerHTML = `
+      <div class="kv"><span class="m">interface</span><b>${state.interface||'ethernet-1/1'}</b></div>
+      <div class="kv"><span class="m">oper-state</span><b style="color:var(--network)">${state.oper||'—'}</b></div>
+      <div class="kv"><span class="m">subscription</span><b style="color:var(--network)">streaming</b></div>
+      <div class="kv"><span class="m">sensor path</span><b style="font-size:10px">${state.path||''}</b></div>
+      <div class="kv"><span class="m">collector</span><b>${state.collector||''}</b></div>
+      <div class="kv"><span class="m">samples</span><b style="color:var(--network); font-size:15px">${state.samples||0}</b></div>
+      ${state.last?`<div style="margin-top:12px; color:var(--muted); font-size:10px; line-height:1.6; word-break:break-all"><span style="color:var(--faint)">last sample →</span> ${state.last}…</div>`:''}`;
+    return;
+  }
+  const pol = (state.policers&&state.policers[0]);
+  b.innerHTML = `
+    <div class="kv"><span class="m">interface</span><b>${state.interface||'ethernet-1/1'}</b></div>
+    <div class="kv"><span class="m">oper-state</span><b style="color:var(--network)">${state.oper||'—'}</b></div>
+    <div class="kv"><span class="m">policer</span><b>${pol? pol.name : '<span style="color:var(--faint)">none</span>'}</b></div>
+    <div class="kv"><span class="m">peak rate</span><b>${pol? (pol.peak_kbps/1000)+' Mbps' : '—'}</b></div>
+    <div id="gauge-slot"></div>`;
+}
+function renderIperf(e){
+  let slot = $('#gauge-slot'); if(!slot){ renderDevice({online:true}); slot=$('#gauge-slot'); }
+  const pct = Math.min(100, e.received_mbps);
+  slot.innerHTML = `<div class="gauge"><div class="lab"><span>throughput hostA→hostB</span><span>0–100 Mbps</span></div>
+    <div class="track"><div class="fill ${e.shaped?'shaped':''}" id="gfill"></div><div class="limit"></div>
+    <div class="val">${e.received_mbps.toFixed(0)} Mbps</div></div></div>`;
+  requestAnimationFrame(()=> $('#gfill').style.width = pct + '%');
+}
+
+// SSE dispatch
+function dispatch(e){
+  if(['stage','a2a','mcp','decision','chain_tx','chain_read','predicate','session','teardown','device','iperf','done','error','boot'].includes(e.kind))
+    if(e.kind!=='boot') addEv(e);
+
+  switch(e.kind){
+    case 'stage':
+      if(e.title && e.title.toLowerCase().includes('pulls')) cutRelay(); else stage(e.domain);
+      running = true; $('#go').disabled = true; break;
+    case 'a2a': setStation('agent', e.frm+' → '+e.to, e.skill); break;
+    case 'decision': setStation('agent', e.accept?'accept ✓':'decline ✗', e.detail); break;
+    case 'chain_tx':
+      setStation('chain', e.method, `${e.tx_hash?e.tx_hash.slice(0,14)+'…':''} · block ${e.block}`);
+      if(e.break_signal) cutRelay(); break;
+    case 'chain_read': break;
+    case 'predicate':
+      setStation('controller', e.title, ''); break;
+    case 'session': setStation('controller', 'authorized', e.detail);
+      $('#revoke').disabled=false; $('#revoke-state').innerHTML='Ticket live. Bell can pull it now — <b style="color:var(--revoke)">the enforcement is downstream of the chain.</b>';
+      $('#sess').innerHTML = e.detail; break;
+    case 'teardown': setStation('controller', 'torn down', e.detail);
+      $('#revoke').disabled=true; break;
+    case 'device': {
+      const st = e.state || {online:false};
+      renderDevice(st);
+      let main, sub;
+      if(st.online===false){ main='offline'; sub=''; }
+      else if(st.mode==='telemetry'){ main=(st.samples||0)+' samples'; sub='forwarding'; }
+      else if(st.policers && st.policers[0]){ main='policer active'; sub='oper '+st.oper; }
+      else { main='no policer'; sub='oper '+st.oper; }
+      setStation('network', main, sub); break;
+    }
+    case 'iperf': renderIperf(e);
+      setStation('network', e.received_mbps.toFixed(0)+' Mbps', e.shaped?'policed at 50':'unshaped'); break;
+    case 'done':
+      running=false; $('#go').disabled=false;
+      if(e.ok) order.forEach(d=>$('#st-'+d).classList.add('done'));
+      break;
+    case 'error': running=false; $('#go').disabled=false; break;
+    case 'reset': location.reload(); break;
+  }
+}
+
+const es = new EventSource('/api/events');
+es.onmessage = m => { try{ dispatch(JSON.parse(m.data)); }catch(e){} };
+</script>
+</body>
+</html>
