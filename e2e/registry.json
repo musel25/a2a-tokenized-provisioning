@@ -1,0 +1,7 @@
+{
+  "v": 0,
+  "providers": [
+    { "name": "bandwidth-provider", "card_url": "http://localhost:9101/.well-known/agent-card.json" },
+    { "name": "telemetry-provider", "card_url": "http://localhost:9102/.well-known/agent-card.json" }
+  ]
+}
