@@ -46,7 +46,8 @@ and Ada *judges* each offer with the real `agents.decision.decide` / `QuoteDecis
 calls, so prices and reasons vary run to run and the budget slider actually matters. The
 header pill shows `judgment · qwen3-4b` (green), `warming` (amber — the console warms the
 container at startup), or `deterministic` (no `.env`; the demo never requires the
-network). Without the lab the console still runs everything real except the router lane,
+network). **The pill is a switch**: click it to mute/unmute live judgment mid-session —
+run one provision deterministic and the next on the model to contrast the two. Without the lab the console still runs everything real except the router lane,
 which says so honestly.
 
 ## The file-tailing view (headless / no browser)

@@ -65,10 +65,16 @@ class Console:
     llm: object = None  # LLMClient once the endpoint answers; judgment slots use it
     llm_model: str = ""
     llm_status: str = "off"  # off | warming | up | down — surfaced in the header pill
+    llm_muted: bool = False  # operator toggle: force deterministic even with the LLM warm
     _nonce: int = 100  # bumped per provision so each offer has a fresh salt (single-use, I2)
     _lock: threading.Lock = field(default_factory=threading.Lock)
 
     # --- capability + lifecycle ---------------------------------------------
+
+    def llm_live(self) -> bool:
+        """Should the judgment slots use the model right now? Warm endpoint AND not muted
+        by the operator — the pill toggles `llm_muted` so a demo can contrast the two."""
+        return self.llm_status == "up" and not self.llm_muted
 
     def status(self) -> dict:
         return {
@@ -78,7 +84,8 @@ class Console:
             "anvil_available": anvil_available(),
             "sessions": {str(k): v for k, v in self.sessions.items()},
             "chain_time": self.reader.chain_time() if self.reader else None,
-            "llm": {"status": self.llm_status, "model": self.llm_model},
+            "llm": {"status": self.llm_status, "model": self.llm_model,
+                    "muted": self.llm_muted, "live": self.llm_live()},
         }
 
     def warm_llm(self) -> None:
@@ -164,7 +171,7 @@ class Console:
         buy, says so, then runs the pipeline. The interpretation is an LLM call when one
         is fast enough; otherwise a deterministic parse stands in (same result)."""
         emit(_chat("you", text))
-        client = self.llm if self.llm_status == "up" else None
+        client = self.llm if self.llm_live() else None
         intent = _parse_intent(text, client)
         emit(_chat("Ada", f"On it — I'll buy **{intent['label']}** (budget {intent['budget']} TOK). "
                           f"{intent['why']}"))
@@ -289,7 +296,7 @@ class Console:
         """Bell prices the quote. Live LLM → a real judgment (prices vary run to run);
         otherwise the canonical list price. Returns (price_tok, note) or (None, reason)."""
         canonical = 10 if service == "bandwidth" else 8
-        if self.llm_status != "up":
+        if not self.llm_live():
             return canonical, "canonical list price (deterministic stand-in)"
         emit(_ev("thinking", "agent", "Bell is pricing…", f"real judgment · {self.llm_model}"))
         try:
@@ -312,7 +319,7 @@ class Console:
         """Ada judges the signed offer — the real `agents.decision.decide` when the LLM
         is live (schema-guarded; declines safely on garbage), else the budget check."""
         price = int(offer.offer.price) // 10**18
-        if self.llm_status != "up":
+        if not self.llm_live():
             accept = price <= budget_tok
             return accept, (f"{price} TOK {'≤' if accept else '>'} budget {budget_tok} TOK — "
                             f"{'accept' if accept else 'decline'} (deterministic stand-in)")
