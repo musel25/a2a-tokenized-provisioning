@@ -283,6 +283,16 @@ answer for `apply_telemetry` (M3.3).
   every port `admin-state disable`, pings time out, no error anywhere on the console.
 - **A freshly committed config needs a beat** — the first ping after `commit now` can
   lose its lead packets to ARP; measure after a warm-up, not across it.
+- **pygnmi + self-signed TLS = silent timeout** (M3.1): the router's cert is a
+  self-signed leaf (`CN=srl1` — the lab CA never reaches the node, same sudoless-overlay
+  breakage as §4), and pygnmi's `skipverify` still verifies underneath →
+  `CERTIFICATE_VERIFY_FAILED` surfacing as a bare `FutureTimeoutError`. Recipe: fetch
+  the leaf (`ssl.get_server_certificate`), pass it as `path_root` (self-signed = its own
+  CA), and `override="srl1"` — the cert's OWN SAN, not the container hostname
+  (`netctl/src/netctl/gnmi_smoke.py` implements it).
+- **The lab's /etc/hosts entries are IPv6-only** and python-grpc won't dial them; ask
+  docker for the node's IPv4 (`docker inspect … .Networks.clab.IPAddress`). gnmic (Go)
+  happily used IPv6, which is why M2.3 never noticed.
 - **This machine had a zombie lab** (`clab-bandwidth-poc-*`, its source repo deleted,
   SRL nodes dead for 2 months) holding RAM; `docker rm -f` of the leftovers freed it.
   `containerlab inspect --all` shows what's really running before you deploy.
