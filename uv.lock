@@ -84,6 +84,8 @@ version = "0.0.0"
 source = { editable = "agents" }
 dependencies = [
     { name = "a2a-interfaces" },
+    { name = "chainmcp" },
+    { name = "httpx" },
     { name = "langgraph" },
     { name = "mcp" },
     { name = "openai" },
@@ -92,6 +94,8 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "a2a-interfaces", editable = "interfaces" },
+    { name = "chainmcp", editable = "chainmcp" },
+    { name = "httpx", specifier = ">=0.27" },
     { name = "langgraph", specifier = ">=0.2" },
     { name = "mcp", specifier = ">=1.2" },
     { name = "openai", specifier = ">=1.50" },
