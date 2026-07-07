@@ -41,6 +41,8 @@
   .led{width:7px; height:7px; border-radius:50%; background:var(--faint); box-shadow:0 0 0 0 transparent}
   .led.on{background:var(--network); box-shadow:0 0 10px var(--network)}
   .led.off{background:var(--revoke)}
+  .led.warm{background:var(--chain); box-shadow:0 0 10px var(--chain); animation:pulse 1.2s ease infinite}
+  @keyframes pulse{50%{opacity:.4}}
 
   /* ── control bar ─────────────────────────────────────────── */
   .control{display:grid; grid-template-columns:1fr 320px; gap:14px; align-items:stretch;
@@ -144,6 +146,8 @@
   .ev.k-a2a{border-left-color:var(--agent)} .ev.k-a2a .tag{color:var(--agent)}
   .ev.k-mcp{border-left-color:var(--agent)} .ev.k-mcp .tag{color:color-mix(in oklab,var(--agent) 70%, #fff 30%)}
   .ev.k-decision{border-left-color:var(--agent); background:rgba(139,123,240,.06)}
+  .ev.k-thinking{border-left-color:var(--agent); opacity:.85} .ev.k-thinking .tag{color:var(--agent)}
+  .ev.k-thinking .body .t{font-style:italic; color:var(--agent)}
   .ev.k-chain_tx{border-left-color:var(--chain)} .ev.k-chain_tx .tag{color:var(--chain)}
   .ev.k-chain_read{border-left-color:color-mix(in oklab,var(--chain) 50%, var(--line))} .ev.k-chain_read .tag{color:var(--chain)}
   .ev.k-predicate{border-left-color:var(--controller)} .ev.k-predicate .tag{color:var(--controller)}
@@ -217,6 +221,7 @@
     <div class="pills">
       <span class="pill"><span class="led" id="led-anvil"></span>chain</span>
       <span class="pill"><span class="led" id="led-lab"></span>router</span>
+      <span class="pill"><span class="led" id="led-llm"></span>judgment <b id="jm">—</b></span>
       <span class="pill">chain&nbsp;time <b id="ct">—</b></span>
       <span class="pill"><span class="led on"></span>live</span>
     </div>
@@ -332,6 +337,11 @@ async function poll(){
     const s = await (await fetch('/api/status')).json();
     $('#led-anvil').className = 'led ' + (s.anvil ? 'on':'');
     $('#led-lab').className = 'led ' + (s.lab ? 'on': (s.anvil ? 'off':''));
+    const l = s.llm || {};
+    $('#jm').textContent = l.status==='up' ? l.model :
+      l.status==='warming' ? l.model+' · warming' :
+      l.status==='down' ? l.model+' · down' : 'deterministic';
+    $('#led-llm').className = 'led ' + (l.status==='up'?'on': l.status==='warming'?'warm': l.status==='down'?'off':'');
     if(s.chain_time){ const d=new Date(s.chain_time*1000);
       $('#ct').textContent = d.toISOString().slice(11,16); }
   }catch(e){}
@@ -373,7 +383,7 @@ function addEv(e){
   const div=document.createElement('div'); div.className='ev k-'+e.kind;
   const tag = ({a2a:'a2a',mcp:'mcp',decision:'judge',chain_tx:'chain',chain_read:'read',
     predicate:'check',session:'ctrl',teardown:'ctrl',device:'dev',iperf:'iperf',done:'done',
-    error:'error',stage:'—',boot:'boot'})[e.kind] || e.kind;
+    error:'error',stage:'—',boot:'boot',thinking:'llm'})[e.kind] || e.kind;
   let detail = e.detail||'';
   if(e.kind==='chain_tx' && e.tx_hash) detail = detail.replace(e.tx_hash.slice(0,18), `<span class="hash">${e.tx_hash.slice(0,18)}</span>`);
   if(e.kind==='predicate') detail = e.checks.map(c=>`<span class="chk ${c.ok?'ok':'no'}">${c.ok?'✓':'✗'}</span>${c.name}`).join(' ');
@@ -461,7 +471,7 @@ function renderIperf(e){
 
 // SSE dispatch
 function dispatch(e){
-  if(['stage','a2a','mcp','decision','chain_tx','chain_read','predicate','session','teardown','device','iperf','done','error','boot'].includes(e.kind))
+  if(['stage','a2a','mcp','decision','chain_tx','chain_read','predicate','session','teardown','device','iperf','done','error','boot','thinking'].includes(e.kind))
     if(e.kind!=='boot') addEv(e);
 
   switch(e.kind){

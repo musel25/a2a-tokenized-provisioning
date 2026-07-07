@@ -26,3 +26,19 @@ code** (backends differ in structured-output flavor; the guard makes that irrele
 - Defense-day rule: run local Ollama — no network dependency in the room. Modal is for dev.
 - Limited to the common API subset — acceptable: we need chat + structured output only.
 - Cold starts on Modal are tolerable in dev, not in the live demo.
+
+## Amendment — 2026-07-07: the Modal leg is built, and it IS the live-demo backend
+
+The dev box turned out too RAM-starved for interactive local judgment (~140 s/decision
+on qwen3:4b), so the operator console shipped with deterministic stand-ins in the two
+judgment slots. That inverted the last two consequences: the live demo now runs
+**Modal-hosted vLLM** (`llmserve/modal_llm.py` — Qwen3-4B on an L4, OpenAI-compatible,
+scale-to-zero), selected by the same three env vars via a repo-root `.env`
+(`just` loads it; `A2A_LIVE_LLM=1` arms the slots).
+
+Cold starts are handled, not suffered: the console server probes-and-warms the endpoint
+at startup (`Console.warm_llm`, generic `agents.llm.llm_up`), the container stays warm
+15 min past the last call, and the header pill shows `judgment · qwen3-4b / warming /
+deterministic` honestly. **The deterministic stand-ins remain the no-network fallback**
+— the defense-day rule is now "the demo must not *require* the network", not "no
+network in the room". Local Ollama remains a third interchangeable backend, unchanged.

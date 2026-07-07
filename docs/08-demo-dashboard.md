@@ -39,9 +39,15 @@ Then **Revoke**: the relay's signal is *cut at the chain*, the break propagates 
 router, and the config is removed (bandwidth throughput jumps back to 100 Mbps; the
 telemetry export destination is deleted from srl1).
 
-The chat interpretation is deterministic by default (fast); set `A2A_CHAT_LLM=1` to route
-it through the real LLM agent (slower on a small box). Without the lab the console still
-runs everything real except the router lane, which says so honestly.
+**Real LLM judgment** (ADR-001 amendment): deploy the agents' model once
+(`uv run modal deploy llmserve/modal_llm.py`, see `llmserve/README.md`), put the endpoint
+in `.env` (`A2A_LIVE_LLM=1`), and both judgment slots go live — Bell *prices* each quote
+and Ada *judges* each offer with the real `agents.decision.decide` / `QuoteDecision`
+calls, so prices and reasons vary run to run and the budget slider actually matters. The
+header pill shows `judgment · qwen3-4b` (green), `warming` (amber — the console warms the
+container at startup), or `deterministic` (no `.env`; the demo never requires the
+network). Without the lab the console still runs everything real except the router lane,
+which says so honestly.
 
 ## The file-tailing view (headless / no browser)
 

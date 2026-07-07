@@ -43,6 +43,7 @@ SR Linux routers via gNMI.
 | `contracts` | Solidity settlement (Foundry) | — |
 | `chainmcp` | chain adapter + signing + MCP server; the only key holder | interfaces, contracts ABI |
 | `netlab` | Containerlab topology + manual recipes | — |
+| `llmserve` | Modal vLLM deployment for the agents' LLM (infra, not imported) | — |
 | `netctl` | gNMI provisioner lib (+ debug MCP) | interfaces |
 | `controller` | predicate, state machine, auth, translators, HTTP API | interfaces (ports) |
 | `agents` | LangGraph graphs, LLM client, MCP clients, A2A adapters | interfaces |

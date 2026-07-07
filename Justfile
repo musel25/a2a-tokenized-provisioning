@@ -1,3 +1,7 @@
+# .env (gitignored) carries LLM_BASE_URL/LLM_MODEL/LLM_API_KEY/A2A_LIVE_LLM — the
+# deployed-LLM switch (llmserve/README.md). Absent .env = deterministic stand-ins.
+set dotenv-load := true
+
 default:
     @just --list
 

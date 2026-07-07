@@ -68,9 +68,15 @@ class LLMClient:
         Each attempt asks for JSON matching the model's schema; the reply is stripped of
         any prose/markdown/thinking fences a small model may wrap it in, then validated.
         """
+        # Strip the top-level description (the pydantic class docstring): a long one reads
+        # like a document to reproduce, and literal-minded instruct models echo the schema
+        # back instead of producing an instance (observed with Qwen3-4B-Instruct-2507).
+        schema_json = schema.model_json_schema()
+        schema_json.pop("description", None)
         instruction = (
-            "Respond with ONLY a single JSON object matching this schema, no prose, no "
-            "markdown fences:\n" + json.dumps(schema.model_json_schema())
+            "Respond with ONLY a single JSON object — an INSTANCE with concrete values "
+            "conforming to this schema, never the schema itself. No prose, no markdown "
+            "fences:\n" + json.dumps(schema_json)
         )
         attempts: list[str] = []
         for _ in range(self._config.max_retries):
@@ -92,6 +98,31 @@ class LLMClient:
             ],
         )
         return response.choices[0].message.content or ""
+
+
+def llm_up(config: LLMConfig | None = None, timeout: float = 20.0) -> bool:
+    """Is the configured OpenAI-compatible endpoint SERVING? Backend-agnostic sibling of
+    `ollama_up` (same bounded-generation idea — see its docstring): a 1-token completion
+    against /chat/completions with a deadline, so it works for vLLM/Modal, Ollama, or any
+    /v1 endpoint. A cold serverless container that boots slower than `timeout` reports
+    False — callers treat that as 'warming', not 'absent', and probe again."""
+    import httpx
+
+    cfg = config or LLMConfig.from_env()
+    try:
+        response = httpx.post(
+            cfg.base_url.rstrip("/") + "/chat/completions",
+            headers={"Authorization": f"Bearer {cfg.api_key}"},
+            json={
+                "model": cfg.model,
+                "messages": [{"role": "user", "content": "ok"}],
+                "max_tokens": 1,
+            },
+            timeout=timeout,
+        )
+        return response.status_code == 200
+    except Exception:
+        return False
 
 
 def ollama_up(base_url: str | None = None, model: str | None = None) -> bool:
