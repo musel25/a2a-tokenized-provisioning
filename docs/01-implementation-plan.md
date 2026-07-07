@@ -83,7 +83,7 @@ The skeleton lifecycle test runs in CI forever, in `mock` profile. Profiles sele
 | M2.3 | Telemetry subscribed **by hand** (gnmic) | 0.5 | sample lines every 10 s | 7 |
 | M3.1 | pygnmi smoke (Get + Set) | 0.5 | script reads oper-status; Set survives | 6 |
 | M3.2 | `apply_bandwidth`/`teardown` lib + mock parity | 1 | same iperf evidence via one call | 6 |
-| M3.3 | `apply_telemetry` (+ forwarder decision) | 1 | collector receives samples via one call | 7 |
+| M3.3 | `apply_telemetry` (ADR-007, revised → device export config) | 1 | ticket configures a `grpc-tunnel` export on srl1 via one call | 7 |
 | M3.4 | **Skeleton v2** (chain+net profile) | 0.5 | lifecycle green against Anvil + lab | 9 |
 | M4.1 | Controller domain: predicate + state machine | 1 | unit tests incl. all deny paths | 5 |
 | M4.2 | Challenge–response auth | 0.5 | replayed proof rejected (test) | 5 |
