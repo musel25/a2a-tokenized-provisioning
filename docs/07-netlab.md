@@ -108,7 +108,106 @@ info from state interface ethernet-1/1        # the STATE tree (what gNMI reads)
 
 Default credentials `admin` / `NokiaSrl1!` (SSH; the docker-exec path skips auth).
 
-## 6. Bandwidth, by hand (M2.2) — *lands with M2.2*
+## 6. Bandwidth, by hand (M2.2): the policer, and the lab's missing ASIC
+
+**The goal:** make "Ada bought 50 Mbps" physically true — an iperf3 stream from hostA
+that plateaus at ≈ 50 Mbps *because the router says so*.
+
+### 6.1 The recipe (what M3.2's `apply_bandwidth` will replay over gNMI)
+
+Two `set` groups: a **policer template** (the rate) and its **attachment** to the
+customer-facing subinterface's input (the edge where Ada's traffic enters the provider's
+network — you police at the border, not in the core):
+
+```
+enter candidate
+set / qos policer-templates policer-template police-50m policer 1 \
+      peak-rate-kbps 50000 committed-rate-kbps 50000 \
+      maximum-burst-size 125000 committed-burst-size 125000 violate-action drop
+set / qos interfaces interface ethernet-1/1.0 interface-ref interface ethernet-1/1
+set / qos interfaces interface ethernet-1/1.0 interface-ref subinterface 0
+set / qos interfaces interface ethernet-1/1.0 input policer-templates policer-template police-50m
+commit now
+```
+
+Undo (teardown — M3.2 needs this idempotent):
+
+```
+enter candidate
+delete / qos interfaces interface ethernet-1/1.0
+delete / qos policer-templates policer-template police-50m
+commit now
+```
+
+**The trap that cost the most time:** attaching with only the list key —
+`set / qos interfaces interface ethernet-1/1.0 input policer-templates …` — fails with
+the (misspelled, misleading) error *"Attachment of policier-templates, not permitted for
+interfaces"*. That is not a platform restriction: the YANG `must` demands the
+`interface-ref { interface, subinterface }` leaves be populated; the list key alone
+isn't enough. Two extra `set` lines fix it. (Found by grepping the image's YANG:
+`srl_nokia-acl-policers.yang`.)
+
+### 6.2 The discovery: the container accepts the config but doesn't enforce it
+
+With the policer committed, a 100 Mbit/s UDP blast sailed through untouched:
+
+```
+$ docker exec clab-a2a-hostA iperf3 -c 10.10.2.10 -u -b 100M
+[  5]  0.00-8.04 sec  95.4 MBytes  99.5 Mbits/sec  0/69053 (0%)   receiver   ← no drops!
+```
+
+Systematic narrowing (all measured, in order):
+
+| Probe | Result | Meaning |
+|---|---|---|
+| `info from state …policer 1` | `peak-rate-kbps 0` | the datapath zeroes policer *state* — it never programmed it |
+| ACL entry `action drop` (icmp) | ping 100 % loss | the XDP datapath **does** enforce ACL match+drop |
+| ACL `action accept rate-limit policer` | UDP untouched | …but not rate-limiting |
+| `tc` ingress police on e1-1 (in srl1's netns) | UDP untouched | XDP grabs RX *before* tc-ingress |
+| **`tc tbf` egress on e1-2 (in srl1's netns)** | **UDP → 48.5 Mbps** | TX goes through the qdisc — enforcement! |
+
+Conclusion: containerized SR Linux is a **control-plane simulator** here — it can deny,
+but it cannot rate-limit. The real ASIC's half of the policer doesn't exist in the
+container.
+
+### 6.3 The adaptation (ADR-006): mirror the committed config into `tc`
+
+The gNMI-written policer config **stays the single source of truth** — the controller
+and netctl never learn about any of this (rule 6 intact). A small piece of *lab
+infrastructure*, [`netlab/mirror-policer-to-tc.sh`](../netlab/mirror-policer-to-tc.sh),
+plays the missing ASIC: it reads the router's *running config* (not state — see above)
+and applies/removes an equivalent `tc tbf` shaper **inside srl1's own netns**, so the
+limiting still physically happens at the router. Ingress policer on `e1-1.0` maps to
+egress tbf on `e1-2` (equivalent for hostA→hostB through a two-port router; tc-ingress
+is XDP-shadowed).
+
+```sh
+./netlab/mirror-policer-to-tc.sh        # run after every policer config change (M2.2);
+                                        # M3.2's lab fixture loops it
+```
+
+### 6.4 The evidence (real runs, MTU already fixed at 1500 — see Appendix)
+
+```
+BEFORE (no policer):
+  TCP:            75.6 Mbits/sec receiver        (CPU-bound datapath ceiling; varies 55–75)
+  UDP offered 100M: 99.5 Mbits/sec receiver, 0 % loss
+
+AFTER (policer committed + shim tick):
+  TCP:            47.7 Mbits/sec receiver        ← the plateau
+  UDP offered 100M: 48.5 Mbits/sec receiver, 51 % dropped at srl1
+
+DETACH (delete attachment + shim tick):
+  TCP back to the unshaped ceiling (56.0 this run)
+```
+
+**Explain-back seed** (docs/01 M2.2): the policer acts at the *ingress edge* —
+`ethernet-1/1.0 input` — because that's where the customer's traffic enters the
+provider's domain; policing in the core would waste the core's capacity carrying
+packets you intend to drop. (In the shim it's *materialized* on the egress port — a
+lab-only displacement with identical effect for this topology.)
+
+## 7. Telemetry, by hand (M2.3) — *lands with M2.3*
 
 ## 7. Telemetry, by hand (M2.3) — *lands with M2.3*
 

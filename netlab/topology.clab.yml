@@ -29,12 +29,14 @@ topology:
       kind: linux
       image: ghcr.io/hellt/network-multitool # has iperf3 (M2.2's measuring tape)
       exec:
+        - ip link set eth1 mtu 1500 # srl1 routes at IP-MTU 1500; 9500-byte TCP segments die silently (docs/07)
         - ip address add 10.10.1.10/24 dev eth1
         - ip route add 10.10.2.0/24 via 10.10.1.1
     hostB:
       kind: linux
       image: ghcr.io/hellt/network-multitool
       exec:
+        - ip link set eth1 mtu 1500
         - ip address add 10.10.2.10/24 dev eth1
         - ip route add 10.10.1.0/24 via 10.10.2.1
 
