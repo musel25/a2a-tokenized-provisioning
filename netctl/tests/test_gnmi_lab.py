@@ -84,43 +84,31 @@ def test_one_call_reproduces_the_m22_plateau():
     )
 
 
-def test_one_call_streams_samples_to_the_collector():
-    """The M3.3 acceptance test: apply_telemetry → TelemetrySample JSON lines arrive
-    at the consumer's endpoint on the sample interval; teardown stops them."""
-    import time
-
-    from a2a_interfaces import TelemetrySample
+def test_one_call_configures_telemetry_export_on_the_device():
+    """The M3.3 acceptance test (ADR-007, revised): the telemetry ticket is the RIGHT to
+    configure telemetry export on the device. apply_telemetry writes a real export
+    destination onto srl1 (readable back off the router); teardown removes it."""
     from a2a_interfaces.models import ResolvedNode
-    from netctl.testing import DummyCollector
 
     provisioner = GnmiProvisioner({"srl1": GnmiTarget(host=lab_ipv4(), tls_name="srl1")})
-    collector = DummyCollector()
     session = "lab-telemetry"
     try:
         result = provisioner.apply_telemetry(
             session,
             ResolvedNode(device="srl1"),
             ["/interface[name=ethernet-1/1]/statistics"],
-            collector.endpoint,
-            sample_interval_s=1,  # fast for the test; the fixture product is 10s
+            "10.0.0.50:57400",
+            sample_interval_s=10,
         )
         assert result.ok, result.detail
 
-        deadline = time.monotonic() + 10
-        while len(collector.lines) < 2 and time.monotonic() < deadline:
-            time.sleep(0.2)
-        assert len(collector.lines) >= 2, "expected at least two samples in 10s"
+        # the config really landed — read it back off the router
+        dests = provisioner.telemetry_config("srl1")
+        assert any(d["name"] == f"a2a-{session}" for d in dests), dests
+        assert dests[0]["address"] == "10.0.0.50" and dests[0]["port"] == 57400
 
-        sample = TelemetrySample.model_validate_json(collector.lines[0])
-        assert sample.session_id == session
-        # the router answers the container subscription with one value: the whole
-        # statistics dict — the counters live one level down
-        assert "in-octets" in collector.lines[0], sample.values
-    finally:
         assert provisioner.teardown(session).ok
+        assert provisioner.telemetry_config("srl1") == []  # removed from the device
+        assert provisioner.teardown(session).ok  # idempotent (rule 8)
+    finally:
         provisioner.close()
-        collector.stop()
-
-    settled = len(collector.lines)
-    time.sleep(2.5)
-    assert len(collector.lines) == settled, "teardown must stop the stream"

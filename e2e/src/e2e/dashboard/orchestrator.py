@@ -58,9 +58,9 @@ class Console:
     controller: ControllerService = None
     controller_id: str = "bw-ctrl-1"
     provisioner: object = None  # GnmiProvisioner if lab up, else None
-    collector: object = None  # a live DummyCollector for telemetry forwarding, per session
     lab_ip: str | None = None
     sessions: dict[int, str] = field(default_factory=dict)  # entitlement_id → session_id
+    last_service: str = "bandwidth"  # what the most recent provision bought (drives teardown view)
     _nonce: int = 100  # bumped per provision so each offer has a fresh salt (single-use, I2)
     _lock: threading.Lock = field(default_factory=threading.Lock)
 
@@ -116,9 +116,6 @@ class Console:
 
     def reset(self) -> None:
         with self._lock:
-            if self.collector:
-                self.collector.stop()
-                self.collector = None
             for c in (self.ada, self.bell, self.reader):
                 if c:
                     c.close()
@@ -137,8 +134,19 @@ class Console:
 
     # --- the flows ----------------------------------------------------------
 
+    def chat(self, text: str, emit: Emit) -> None:
+        """The front door: Ada's agent reads a plain-language request, decides what to
+        buy, says so, then runs the pipeline. The interpretation is an LLM call when one
+        is fast enough; otherwise a deterministic parse stands in (same result)."""
+        emit(_chat("you", text))
+        intent = _parse_intent(text)
+        emit(_chat("Ada", f"On it — I'll buy **{intent['label']}** (budget {intent['budget']} TOK). "
+                          f"{intent['why']}"))
+        self.provision(intent["service"], intent["budget"], emit)
+
     def provision(self, service: str, budget_tok: int, emit: Emit) -> None:
         self.ensure_started(emit)
+        self.last_service = service
         self._nonce += 1  # a fresh salt each click — every offer is single-use (I2)
         offer = self._offer_for(service, self._nonce)
         need = _need_for(service)
@@ -236,19 +244,18 @@ class Console:
             emit(_device(self.device_state()))
             emit(_iperf_ev(_iperf(), shaped=True))
         else:
-            deadline = time.monotonic() + 6
-            while self.collector and len(self.collector.lines) < 1 and time.monotonic() < deadline:
-                time.sleep(0.2)
-            n = len(self.collector.lines) if self.collector else 0
-            sample = self.collector.lines[0] if (self.collector and self.collector.lines) else ""
+            # the ticket authorized the controller to write telemetry-export config to the
+            # router — read it back off srl1 as proof (symmetric with the policer)
+            dests = self.provisioner.telemetry_config("srl1")
+            d = dests[0] if dests else {}
             state = {
                 "online": True, "mode": "telemetry", "interface": "ethernet-1/1", "oper": "up",
-                "samples": n, "collector": self.collector.endpoint if self.collector else "",
-                "path": TELEMETRY_NEED.sensor_paths[0], "last": sample[:120],
+                "destination": d.get("name", ""), "collector": f"{d.get('address', '')}:{d.get('port', '')}",
+                "path": TELEMETRY_NEED.sensor_paths[0], "installed": bool(dests),
             }
             emit({"kind": "device", "domain": "network", "state": state,
-                  "title": "telemetry forwarding",
-                  "detail": f"{n} sample(s) srl1 → Ada's collector · {TELEMETRY_NEED.sample_interval_s}s interval",
+                  "title": "telemetry export configured",
+                  "detail": f"grpc-tunnel destination {d.get('name', '')} → {d.get('address', '')}:{d.get('port', '')} · written to srl1",
                   "t": _now_ms()})
 
     def _emit_teardown(self, eid: int, sid: str, emit: Emit) -> None:
@@ -256,9 +263,15 @@ class Console:
         if not self.provisioner:
             emit(_ev("device", "network", "Router offline", "no live enforcement to remove"))
             return
-        if self.collector:
-            self.collector.stop()
-            self.collector = None
+        if self.last_service == "telemetry":
+            state = {"online": True, "mode": "telemetry", "interface": "ethernet-1/1",
+                     "oper": "up", "installed": bool(self.provisioner.telemetry_config("srl1")),
+                     "destination": "", "collector": "", "path": TELEMETRY_NEED.sensor_paths[0]}
+            emit({"kind": "device", "domain": "network", "state": state,
+                  "title": "telemetry export removed",
+                  "detail": "grpc-tunnel destination deleted from srl1 — access withdrawn",
+                  "t": _now_ms()})
+            return
         _shim()
         emit(_device(self.device_state()))
         emit(_iperf_ev(_iperf(), shaped=False))
@@ -285,6 +298,83 @@ class Console:
 
 def _ev(kind: str, domain: str, title: str, detail: str = "") -> dict:
     return {"kind": kind, "domain": domain, "title": title, "detail": detail, "t": _now_ms()}
+
+
+def _chat(who: str, text: str) -> dict:
+    return {"kind": "chat", "domain": "agent", "who": who, "title": who, "detail": text, "t": _now_ms()}
+
+
+# --- intent: turn a plain-language request into what Ada should buy ----------
+# Two products, and the console makes the distinction the whole point:
+#   bandwidth  → a guaranteed rate the router holds for you (a policer)
+#   telemetry  → the RIGHT to configure telemetry export on the device (a dial-out dest)
+
+_BANDWIDTH = {
+    "service": "bandwidth", "label": "a 50 Mbps bandwidth guarantee",
+    "why": "A committed rate the router holds for you through the window.",
+}
+_TELEMETRY = {
+    "service": "telemetry", "label": "the right to configure telemetry export on srl1",
+    "why": "The ticket lets the controller write a telemetry-export config onto the router for you.",
+}
+
+
+def _parse_intent(text: str) -> dict:
+    return _llm_intent(text) or _keyword_intent(text)
+
+
+def _keyword_intent(text: str) -> dict:
+    import re
+
+    t = text.lower()
+    telemetry = any(k in t for k in
+                    ("telemetr", "monitor", "stats", "counter", "export", "subscri", "observ", "config the", "configure telem"))
+    base = dict(_TELEMETRY if telemetry else _BANDWIDTH)
+    budget = 15
+    m = re.search(r"(\d+)\s*(tok|token)", t)
+    if m:
+        budget = int(m.group(1))
+    elif "budget" in t:
+        nums = re.findall(r"\d+", t.split("budget", 1)[1])
+        if nums:
+            budget = int(nums[0])
+    base["budget"] = budget
+    return base
+
+
+def _llm_intent(text: str) -> dict | None:
+    """The real-agent path: an LLM reads the request and picks the product. Opt-in
+    (A2A_CHAT_LLM=1) because local models on a small box answer too slowly to feel like
+    chat; the deterministic parse stands in by default with the same result."""
+    import os
+
+    if os.environ.get("A2A_CHAT_LLM") != "1":
+        return None
+    try:
+        from agents.llm import LLMClient, ollama_up
+        from pydantic import BaseModel
+
+        if not ollama_up():
+            return None
+
+        class Intent(BaseModel):
+            service: str  # "bandwidth" or "telemetry"
+            budget_tok: int
+            reasoning: str
+
+        out = LLMClient().structured(
+            system=("You route a network-buyer's request to ONE product. bandwidth = a "
+                    "guaranteed data rate through the router. telemetry = the right to "
+                    "configure the router to export monitoring to a collector. Pick a "
+                    "budget in TOK (default 15). Reply as the schema."),
+            user=text, schema=Intent,
+        )
+        base = dict(_TELEMETRY if out.service == "telemetry" else _BANDWIDTH)
+        base["budget"] = out.budget_tok or 15
+        base["why"] = out.reasoning or base["why"]
+        return base
+    except Exception:  # noqa: BLE001 — any failure falls back to the deterministic parse
+        return None
 
 
 def _stage(domain: str, label: str) -> dict:
@@ -444,14 +534,9 @@ def _console_offer_for(self: Console, service: str, nonce: int):
     if service == "bandwidth":
         offer = CANONICAL_OFFER.model_copy(update={"salt": "0x" + f"{0x5A000 + nonce:064x}"})
         return self.bell.sign_offer(offer)
-    # telemetry: stand up a fresh live collector this session forwards to, and bake its
-    # endpoint into the signed offer so the controller's apply_telemetry reaches it.
-    from netctl.testing import DummyCollector
-
-    if self.collector:
-        self.collector.stop()
-    self.collector = DummyCollector()
-    return _telemetry_offer(self.bell, nonce, self.collector.endpoint)
+    # telemetry: the offer names Ada's collector; the ticket buys the right to write a
+    # gNMI export destination to the router pointing there (ADR-007).
+    return _telemetry_offer(self.bell, nonce, TELEMETRY_NEED.collector_endpoint)
 
 
 Console._offer_for = _console_offer_for

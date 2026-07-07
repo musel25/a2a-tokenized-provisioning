@@ -66,6 +66,14 @@ def build_app() -> FastAPI:
         except Exception as err:  # noqa: BLE001
             return {"online": False, "error": str(err)[:200]}
 
+    @app.post("/api/chat")
+    def chat(body: dict) -> dict:
+        text = (body or {}).get("text", "").strip()
+        if not text:
+            return {"error": "empty"}
+        _run(lambda emit: CONSOLE.chat(text, emit))
+        return {"started": "chat"}
+
     @app.post("/api/provision/{service}")
     def provision(service: str, budget: int = 15) -> dict:
         _run(CONSOLE.provision, service, budget)

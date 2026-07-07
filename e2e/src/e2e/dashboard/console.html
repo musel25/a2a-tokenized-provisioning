@@ -43,8 +43,33 @@
   .led.off{background:var(--revoke)}
 
   /* ── control bar ─────────────────────────────────────────── */
-  .control{display:grid; grid-template-columns:1.3fr auto auto; gap:14px; align-items:stretch;
+  .control{display:grid; grid-template-columns:1fr 320px; gap:14px; align-items:stretch;
     margin:14px 0 18px}
+  .sidecol{display:flex; flex-direction:column; justify-content:space-between}
+
+  /* chat front door */
+  .chatcard{display:flex; flex-direction:column}
+  .products{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px}
+  .prod{border:1px solid var(--line-2); border-radius:10px; padding:9px 11px; cursor:pointer;
+    transition:border-color .2s, background .2s}
+  .prod:hover{border-color:var(--c,var(--agent)); background:rgba(255,255,255,.02)}
+  .prod .pk{display:block; font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--c); font-weight:600; margin-bottom:3px}
+  .prod .pd{display:block; font-size:10.5px; color:var(--muted); line-height:1.4}
+  .chatlog{flex:1; min-height:118px; max-height:150px; overflow-y:auto; display:flex; flex-direction:column; gap:8px; padding:2px 2px 2px 0}
+  .chatlog::-webkit-scrollbar{width:7px} .chatlog::-webkit-scrollbar-thumb{background:var(--line-2); border-radius:4px}
+  .msg{display:flex; gap:9px; font-size:12px; line-height:1.5; animation:pop .25s ease}
+  .msg .nm{flex:0 0 40px; font-size:9.5px; letter-spacing:.04em; text-transform:uppercase; padding-top:2px}
+  .msg.you .nm{color:var(--muted)} .msg.ada .nm{color:var(--agent)}
+  .msg .tx{color:var(--text)} .msg.you .tx{color:var(--muted)}
+  .msg .tx b{color:var(--agent); font-weight:600}
+  .chatrow{display:flex; gap:8px; margin-top:12px}
+  #chatinput{flex:1; background:var(--panel-2); border:1px solid var(--line-2); border-radius:10px;
+    padding:11px 13px; color:var(--text); font-family:var(--mono); font-size:12.5px; outline:none}
+  #chatinput:focus{border-color:var(--agent); box-shadow:0 0 0 1px rgba(139,123,240,.35)}
+  .send{padding:11px 18px; border-radius:10px; cursor:pointer; border:0; font-family:var(--display);
+    font-weight:600; letter-spacing:.04em; font-size:12.5px; color:#0a0f16;
+    background:linear-gradient(180deg,#9d8ff5,#8B7BF0); white-space:nowrap}
+  .send:hover{filter:brightness(1.08)} .send:disabled{opacity:.45; cursor:not-allowed; filter:grayscale(.4)}
   .card{background:linear-gradient(180deg,var(--panel),var(--panel-2)); border:1px solid var(--line);
     border-radius:14px; padding:14px 16px}
   .card h2{font-family:var(--display); font-size:10.5px; letter-spacing:.18em; text-transform:uppercase;
@@ -167,42 +192,46 @@
   </header>
 
   <section class="control">
-    <div class="card">
-      <h2>Ada requests a service</h2>
-      <div class="seg" id="svc">
-        <button data-s="bandwidth" class="sel">Bandwidth · 50 Mbps</button>
-        <button data-s="telemetry">Telemetry · 10s</button>
+    <div class="card chatcard">
+      <h2>Talk to Ada's agent</h2>
+      <div class="products">
+        <div class="prod" data-ex="Get me 50 Mbps from hostA to hostB, budget 12 TOK">
+          <span class="pk" style="--c:var(--network)">bandwidth</span>
+          <span class="pd">a guaranteed rate the router holds for you</span>
+        </div>
+        <div class="prod" data-ex="Buy me the right to configure telemetry export on srl1">
+          <span class="pk" style="--c:var(--chain)">telemetry</span>
+          <span class="pd">the right to push a telemetry config onto the device</span>
+        </div>
       </div>
-      <div class="row slider">
-        <span class="m" style="color:var(--muted)">budget</span>
-        <input type="range" id="budget" min="1" max="30" value="15" />
-        <span class="budget"><b id="budgetv">15</b> TOK</span>
+      <div class="chatlog" id="chatlog">
+        <div class="msg ada"><span class="nm">Ada</span><span class="tx">Tell me what you need — bandwidth or the right to configure telemetry — and I'll go negotiate, pay, and activate it. Try one of the examples above.</span></div>
       </div>
-      <button class="go" id="go">Ada, get me this →</button>
-      <div class="hint">Ada's agent discovers Bell, negotiates over A2A, pays on-chain, and activates.</div>
+      <div class="chatrow">
+        <input id="chatinput" placeholder="e.g. get me 50 Mbps under 12 TOK" autocomplete="off" />
+        <button class="send" id="send">Send →</button>
+      </div>
     </div>
 
-    <div class="card">
-      <h2>Bell's kill switch</h2>
-      <div class="state" style="color:var(--muted); font-size:11.5px; min-height:52px" id="revoke-state">
-        No active ticket yet. Provision a service, then Bell can revoke it mid-window.
-      </div>
-      <button class="btn" id="revoke" disabled>Revoke ticket ✕</button>
-      <div class="hint">One on-chain transaction. Watch the throughput die.</div>
-    </div>
-
-    <div class="card" style="display:flex; flex-direction:column; justify-content:space-between">
+    <div class="card sidecol">
       <div>
-        <h2>Session</h2>
-        <div class="state" id="sess" style="color:var(--muted); font-size:11.5px">idle</div>
+        <h2>Bell's kill switch</h2>
+        <div class="state" style="color:var(--muted); font-size:11.5px; min-height:44px" id="revoke-state">
+          No active ticket yet. Buy a service, then Bell can revoke it mid-window.
+        </div>
+        <button class="btn" id="revoke" disabled>Revoke ticket ✕</button>
       </div>
-      <button class="btn ghost" id="reset">Reset stack</button>
+      <div style="margin-top:14px">
+        <h2>Session</h2>
+        <div class="state" id="sess" style="color:var(--muted); font-size:11.5px; min-height:20px">idle</div>
+        <button class="btn ghost" id="reset" style="margin-top:10px">Reset stack</button>
+      </div>
     </div>
   </section>
 
   <section class="relay-wrap">
     <div class="relay-title"><span class="k">the trust relay</span>
-      <span class="n">a request for bandwidth crosses four trust domains — watch who does what</span></div>
+      <span class="n">what Ada bought crosses four trust domains — watch who does what</span></div>
     <div class="relay" id="relay">
       <div class="station" data-d="agent" id="st-agent">
         <span class="badge">judgment</span><div class="glyph">◆</div>
@@ -233,7 +262,7 @@
   <section class="split">
     <div class="card">
       <h2>Event stream — A2A · MCP · chain</h2>
-      <div class="stream" id="stream"><div class="idle">Press “Ada, get me this” to begin.</div></div>
+      <div class="stream" id="stream"><div class="idle">Send a message to Ada's agent to begin.</div></div>
     </div>
     <div class="card insp">
       <h2>Device inspector — srl1</h2>
@@ -246,19 +275,25 @@
 const $ = s => document.querySelector(s);
 let service = 'bandwidth', running = false;
 
-// controls
-$('#svc').addEventListener('click', e => {
-  const b = e.target.closest('button'); if(!b) return;
-  service = b.dataset.s;
-  [...$('#svc').children].forEach(x => x.classList.toggle('sel', x===b));
-});
-$('#budget').addEventListener('input', e => $('#budgetv').textContent = e.target.value);
-$('#go').addEventListener('click', () => {
-  resetRelay();
-  fetch(`/api/provision/${service}?budget=${$('#budget').value}`, {method:'POST'});
-});
+// chat front door
+function send(){
+  const inp = $('#chatinput'); const text = inp.value.trim(); if(!text) return;
+  inp.value=''; resetRelay();
+  fetch('/api/chat', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({text})});
+}
+$('#send').addEventListener('click', send);
+$('#chatinput').addEventListener('keydown', e => { if(e.key==='Enter') send(); });
+document.querySelectorAll('.prod').forEach(p =>
+  p.addEventListener('click', () => { $('#chatinput').value = p.dataset.ex; $('#chatinput').focus(); }));
 $('#revoke').addEventListener('click', () => fetch('/api/revoke', {method:'POST'}));
 $('#reset').addEventListener('click', () => { fetch('/api/reset', {method:'POST'}); location.reload(); });
+
+function addChat(who, text){
+  const log = $('#chatlog');
+  const div = document.createElement('div'); div.className = 'msg ' + (who==='you'?'you':'ada');
+  div.innerHTML = `<span class="nm">${who}</span><span class="tx">${text.replace(/\*\*(.+?)\*\*/g,'<b>$1</b>')}</span>`;
+  log.appendChild(div); log.scrollTop = log.scrollHeight;
+}
 
 // status poll
 async function poll(){
@@ -322,14 +357,15 @@ function renderDevice(state){
     return;
   }
   if(state.mode==='telemetry'){
+    const on = state.installed;
     b.innerHTML = `
       <div class="kv"><span class="m">interface</span><b>${state.interface||'ethernet-1/1'}</b></div>
       <div class="kv"><span class="m">oper-state</span><b style="color:var(--network)">${state.oper||'—'}</b></div>
-      <div class="kv"><span class="m">subscription</span><b style="color:var(--network)">streaming</b></div>
+      <div class="kv"><span class="m">telemetry export</span><b style="color:${on?'var(--network)':'var(--faint)'}">${on?'configured':'none'}</b></div>
+      <div class="kv"><span class="m">dial-out dest</span><b>${on? state.destination : '<span style="color:var(--faint)">none</span>'}</b></div>
+      <div class="kv"><span class="m">collector</span><b>${on? state.collector : '—'}</b></div>
       <div class="kv"><span class="m">sensor path</span><b style="font-size:10px">${state.path||''}</b></div>
-      <div class="kv"><span class="m">collector</span><b>${state.collector||''}</b></div>
-      <div class="kv"><span class="m">samples</span><b style="color:var(--network); font-size:15px">${state.samples||0}</b></div>
-      ${state.last?`<div style="margin-top:12px; color:var(--muted); font-size:10px; line-height:1.6; word-break:break-all"><span style="color:var(--faint)">last sample →</span> ${state.last}…</div>`:''}`;
+      ${on?`<div style="margin-top:12px; color:var(--muted); font-size:10.5px; line-height:1.6"><span style="color:var(--faint)">the ticket's right, exercised →</span> the controller wrote a <code>grpc-tunnel destination</code> to srl1. Read straight off the router.</div>`:''}`;
     return;
   }
   const pol = (state.policers&&state.policers[0]);
@@ -355,9 +391,10 @@ function dispatch(e){
     if(e.kind!=='boot') addEv(e);
 
   switch(e.kind){
+    case 'chat': addChat(e.who, e.detail); break;
     case 'stage':
       if(e.title && e.title.toLowerCase().includes('pulls')) cutRelay(); else stage(e.domain);
-      running = true; $('#go').disabled = true; break;
+      running = true; $('#send').disabled = true; break;
     case 'a2a': setStation('agent', e.frm+' → '+e.to, e.skill); break;
     case 'decision': setStation('agent', e.accept?'accept ✓':'decline ✗', e.detail); break;
     case 'chain_tx':
@@ -376,7 +413,7 @@ function dispatch(e){
       renderDevice(st);
       let main, sub;
       if(st.online===false){ main='offline'; sub=''; }
-      else if(st.mode==='telemetry'){ main=(st.samples||0)+' samples'; sub='forwarding'; }
+      else if(st.mode==='telemetry'){ main = st.installed?'export configured':'no export'; sub='oper '+st.oper; }
       else if(st.policers && st.policers[0]){ main='policer active'; sub='oper '+st.oper; }
       else { main='no policer'; sub='oper '+st.oper; }
       setStation('network', main, sub); break;
@@ -384,10 +421,10 @@ function dispatch(e){
     case 'iperf': renderIperf(e);
       setStation('network', e.received_mbps.toFixed(0)+' Mbps', e.shaped?'policed at 50':'unshaped'); break;
     case 'done':
-      running=false; $('#go').disabled=false;
+      running=false; $('#send').disabled=false;
       if(e.ok) order.forEach(d=>$('#st-'+d).classList.add('done'));
       break;
-    case 'error': running=false; $('#go').disabled=false; break;
+    case 'error': running=false; $('#send').disabled=false; break;
     case 'reset': location.reload(); break;
   }
 }

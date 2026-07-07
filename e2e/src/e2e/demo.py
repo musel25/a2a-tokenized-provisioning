@@ -2,7 +2,7 @@
 
 Runs the real lifecycle end to end — Anvil + the controller + the SR Linux lab — for
 BANDWIDTH (M6.2: iperf plateau, auto-teardown at chain-time t1) and then TELEMETRY
-(M6.3: samples arrive at a collector). Every step emits a DashboardEvent, so the whole
+(M6.3: the telemetry ticket configures export on the device). Every step emits a DashboardEvent, so the whole
 thing is watchable in the Streamlit view (M6.4). This is the demo script (M6.5) as code:
 `uv run python -m e2e.demo` prints the narration and writes e2e/runs/demo/events.jsonl.
 
@@ -16,7 +16,6 @@ Needs Anvil + forge artifacts + the live lab.
 from __future__ import annotations
 
 import subprocess
-import time
 from pathlib import Path
 
 from a2a_interfaces.fixtures import (
@@ -28,7 +27,7 @@ from chainmcp import ChainClient
 from chainmcp.testing import ANVIL_KEYS, launch_anvil
 from netctl.connect import GnmiTarget
 from netctl.provisioner import GnmiProvisioner
-from netctl.testing import DummyCollector, lab_ipv4
+from netctl.testing import lab_ipv4
 
 from e2e.dashboard.emitter import RunLog
 
@@ -112,23 +111,21 @@ def run() -> dict:
         print(f"  bandwidth: after teardown → {measured['bandwidth_after_mbps']:.1f} Mbps (full)")
 
         # --- TELEMETRY (M6.3) — the SAME provisioner, one different call -------
-        collector = DummyCollector()
+        # The telemetry ticket is the right to configure telemetry export on the device
+        # (ADR-007): apply writes a real dial-out destination to srl1, teardown removes it.
         log.emit(
             ada.chain_time(),
             "apply_telemetry",
             "network",
-            "forwarder: srl1 counters → Ada's collector",
+            "gNMI Set: telemetry export destination on srl1 → Ada's collector",
         )
         assert provisioner.apply_telemetry(
-            "demo-tel", RESOLVED_NODE, TELEMETRY_NEED.sensor_paths, collector.endpoint, 1
+            "demo-tel", RESOLVED_NODE, TELEMETRY_NEED.sensor_paths, "10.0.0.50:57400", 10
         ).ok
-        deadline = time.monotonic() + 8
-        while len(collector.lines) < 2 and time.monotonic() < deadline:
-            time.sleep(0.2)
-        measured["telemetry_samples"] = len(collector.lines)
-        print(f"  telemetry: {len(collector.lines)} samples arrived at the collector")
+        dests = provisioner.telemetry_config("srl1")  # read the config back off the router
+        measured["telemetry_export"] = dests[0]["name"] if dests else None
+        print(f"  telemetry: export {measured['telemetry_export']} configured on srl1")
         provisioner.teardown("demo-tel")
-        collector.stop()
 
         log.emit(ada.chain_time(), "report", "agent", "both services delivered, then withdrawn")
         return measured
