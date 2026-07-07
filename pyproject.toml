@@ -6,7 +6,7 @@ requires-python = ">=3.12"
 dependencies = []
 
 [tool.uv.workspace]
-members = ["interfaces", "e2e", "chainmcp", "netctl"]
+members = ["interfaces", "e2e", "chainmcp", "netctl", "controller"]
 
 [dependency-groups]
 demo = [
@@ -19,10 +19,10 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["interfaces/tests", "e2e/tests", "chainmcp/tests", "netctl/tests"]
+testpaths = ["interfaces/tests", "e2e/tests", "chainmcp/tests", "netctl/tests", "controller/tests"]
 
 [tool.ruff]
 line-length = 100
-src = ["interfaces/src", "e2e/src", "chainmcp/src", "netctl/src"]
+src = ["interfaces/src", "e2e/src", "chainmcp/src", "netctl/src", "controller/src"]
 # Teaching notebooks under e2e/notebooks/ are exploratory artifacts, not library code.
 extend-exclude = ["e2e/notebooks"]
