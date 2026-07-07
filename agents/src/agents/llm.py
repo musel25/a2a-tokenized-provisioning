@@ -103,12 +103,13 @@ class LLMClient:
                 {"role": "user", "content": user},
             ],
         )
-        if response.usage is not None:  # accumulate across retries within one structured()
+        usage = getattr(response, "usage", None)  # stub servers/tests may omit it
+        if usage is not None:  # accumulate across retries within one structured()
             self.last_usage = {
                 "prompt_tokens": self.last_usage.get("prompt_tokens", 0)
-                + (response.usage.prompt_tokens or 0),
+                + (usage.prompt_tokens or 0),
                 "completion_tokens": self.last_usage.get("completion_tokens", 0)
-                + (response.usage.completion_tokens or 0),
+                + (usage.completion_tokens or 0),
             }
         return response.choices[0].message.content or ""
 
