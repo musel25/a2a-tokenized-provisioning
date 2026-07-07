@@ -1,10 +1,11 @@
 """Cardboard props: the three fakes the skeleton runs on.
 
 Each satisfies a Protocol from `a2a_interfaces.ports` (rule 7), so the same wiring
-later accepts the real adapters unchanged: FakeChain → chainmcp (M1.5), FakeNet →
-netctl (M3.4). They are deliberately dumb — a dict, two balance numbers, a recorded
-call-list. If a fake starts to look like a real Ethereum or a real router, it is a
-bug (docs/01 M0.3 "watch for").
+later accepts the real adapters unchanged: FakeChain → chainmcp (landed M1.5),
+FakeNet → netctl (landed M3.2/M3.4; the class itself now lives in netctl.mock).
+They are deliberately dumb — a dict, two balance numbers, a recorded call-list. If a
+fake starts to look like a real Ethereum or a real router, it is a bug (docs/01 M0.3
+"watch for").
 
 Bodies are added test-first; a method that raises NotImplementedError is one no test
 has demanded yet.
@@ -15,13 +16,11 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from a2a_interfaces import (
-    ApplyResult,
     BandwidthParams,
     EntitlementView,
-    ResolvedNode,
-    ResolvedPath,
     SignedOffer,
 )
+from netctl.mock import MockProvisioner
 
 
 def _decode_bandwidth_params(params: str) -> BandwidthParams:
@@ -150,42 +149,7 @@ class FakeChain:
         self._watchers.append(callback)
 
 
-class FakeNet:
-    """Records apply_*/teardown calls instead of touching a router (NetworkProvisioner)."""
-
-    def __init__(self) -> None:
-        self.applied: dict[str, dict] = {}
-        self.torn_down: list[str] = []
-
-    def apply_bandwidth(
-        self,
-        session_id: str,
-        path: ResolvedPath,
-        capacity_bps: int,
-        qos_class: int,
-    ) -> ApplyResult:
-        self.applied[session_id] = {
-            "path": path,
-            "capacity_bps": capacity_bps,
-            "qos_class": qos_class,
-        }
-        return ApplyResult(ok=True)
-
-    def apply_telemetry(
-        self,
-        session_id: str,
-        target: ResolvedNode,
-        sensor_paths: list[str],
-        collector_endpoint: str,
-        sample_interval_s: int,
-    ) -> ApplyResult:
-        raise NotImplementedError
-
-    def teardown(self, session_id: str) -> ApplyResult:
-        # Idempotent (rule 8): pop with default, never raise on a second call.
-        self.applied.pop(session_id, None)
-        self.torn_down.append(session_id)
-        return ApplyResult(ok=True)
-
-    def health(self) -> bool:
-        return True
+# The recording provisioner grew up and moved out (M3.2): it now lives in netctl
+# beside the real GnmiProvisioner, and both run the same contract suite (rule 7).
+# The skeleton keeps its stage name.
+FakeNet = MockProvisioner
