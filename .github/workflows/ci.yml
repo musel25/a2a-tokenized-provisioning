@@ -14,6 +14,11 @@ jobs:
       - uses: astral-sh/setup-uv@v8.2.0 # exact pin: no v8 major-version alias is published
         with:
           enable-cache: true
+      # Since M1.5 the python job needs Foundry too: chainmcp's cross-stack signature
+      # tests spawn a live anvil and load forge-built ABIs — the one seam (Python signs,
+      # Solidity verifies) that neither language's unit tests can catch alone.
+      - uses: foundry-rs/foundry-toolchain@v1
+      - run: forge build --root contracts
       - run: uv sync --all-packages
       - run: uv run pytest -v
       - run: uv run ruff check .
