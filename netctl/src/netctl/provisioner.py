@@ -18,6 +18,7 @@ from a2a_interfaces import ApplyResult, ResolvedNode, ResolvedPath
 
 from . import paths
 from .connect import GnmiTarget, connect
+from .forwarder import TelemetryForwarder
 
 # 20 ms of burst at 50 Mbps ≈ 125 KB — the M2.2 lab value; enough for TCP to breathe,
 # small enough that the plateau stays crisp.
@@ -38,6 +39,7 @@ class GnmiProvisioner:
         # gNMI CONNECTIONS (60/min) — a dial-per-operation adapter locks itself out
         # under any real load. Not thread-safe; the controller serializes (v0).
         self._clients: dict[str, object] = {}
+        self._forwarders: dict[str, TelemetryForwarder] = {}  # telemetry session state
 
     # --- NetworkProvisioner (docs/03 §5) ------------------------------------
 
@@ -94,7 +96,31 @@ class GnmiProvisioner:
         collector_endpoint: str,
         sample_interval_s: int,
     ) -> ApplyResult:
-        raise NotImplementedError("telemetry lands at M3.3 (ADR-007)")
+        """ADR-007: start a provider-side forwarder — router → consumer's endpoint.
+
+        Telemetry sessions are PROCESS state (the router holds no per-session config;
+        the subscription dies with the forwarder), so unlike bandwidth this teardown
+        does not survive a restart — the honest v0 trade recorded in the ADR.
+        """
+        if session_id in self._forwarders:
+            return ApplyResult(ok=True, detail="already forwarding (idempotent apply)")
+        try:
+            gnmi_target = self._targets[target.device]
+        except KeyError as err:
+            return ApplyResult(ok=False, detail=f"no gNMI target for device {err}")
+        forwarder = TelemetryForwarder(
+            session_id, gnmi_target, sensor_paths, collector_endpoint, sample_interval_s
+        )
+        try:
+            forwarder.start()
+        except Exception as err:  # noqa: BLE001 — the port reports, callers decide
+            return ApplyResult(ok=False, detail=f"forwarder failed to start: {err}")
+        self._forwarders[session_id] = forwarder
+        return ApplyResult(
+            ok=True,
+            detail=f"forwarding {len(sensor_paths)} path(s) from {target.device} "
+            f"to {collector_endpoint} every {sample_interval_s}s",
+        )
 
     def teardown(self, session_id: str) -> ApplyResult:
         """Remove everything named after this session, on every device we know.
@@ -103,8 +129,13 @@ class GnmiProvisioner:
         `a2a-<sid>` + any attachment referencing it), never remembered here — so a
         second call, or a call after a process restart, is the same success (rule 8).
         """
-        name = _template_name(session_id)
         removed: list[str] = []
+        forwarder = self._forwarders.pop(session_id, None)
+        if forwarder is not None:
+            forwarder.stop()
+            removed.append("telemetry forwarder")
+
+        name = _template_name(session_id)
         for device in self._targets:
             try:
                 client = self._client(device)
@@ -114,7 +145,7 @@ class GnmiProvisioner:
                     removed.append(device)
             except Exception as err:  # noqa: BLE001
                 return ApplyResult(ok=False, detail=f"gNMI teardown failed on {device}: {err}")
-        detail = f"removed from {', '.join(removed)}" if removed else "nothing to remove"
+        detail = f"removed: {', '.join(removed)}" if removed else "nothing to remove"
         return ApplyResult(ok=True, detail=detail)
 
     def health(self) -> bool:
@@ -126,8 +157,11 @@ class GnmiProvisioner:
         return True
 
     def close(self) -> None:
-        """Drop every cached connection; idempotent. The provisioner reconnects
-        lazily if used again."""
+        """Stop every forwarder and drop every cached connection; idempotent. The
+        provisioner reconnects lazily if used again (forwarders do NOT auto-restart)."""
+        for forwarder in self._forwarders.values():
+            forwarder.stop()
+        self._forwarders.clear()
         for client in self._clients.values():
             try:
                 client.close()

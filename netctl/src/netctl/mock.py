@@ -42,7 +42,13 @@ class MockProvisioner:
         collector_endpoint: str,
         sample_interval_s: int,
     ) -> ApplyResult:
-        raise NotImplementedError("telemetry lands at M3.3 (ADR-007)")
+        self.applied[session_id] = {
+            "target": target,
+            "sensor_paths": sensor_paths,
+            "collector_endpoint": collector_endpoint,
+            "sample_interval_s": sample_interval_s,
+        }
+        return ApplyResult(ok=True)
 
     def teardown(self, session_id: str) -> ApplyResult:
         # Idempotent (rule 8): pop with default, never raise on a second call.

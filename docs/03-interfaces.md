@@ -335,6 +335,27 @@ The mock provisioner implements the same `Protocol` and records calls for test a
 An optional MCP wrapper over `netctl` exists for manual debugging only — it is **not** on
 the agent path.
 
+### 5.1 Telemetry delivery (ADR-007) — `TelemetrySample`
+
+Producer: netctl's provider-side forwarder (it subscribes to the router over gNMI and
+flips the direction). Consumer: whatever listens at the entitlement's
+`collector_endpoint` — the e2e dummy collector, later the dashboard. Wire format: **one
+JSON line per sample** over TCP.
+
+```json
+{
+  "v": 0,
+  "session_id": "ent7-a1",
+  "path": "srl_nokia-interfaces:interface[name=ethernet-1/1]/statistics",
+  "timestamp_ns": 1783394038730008273,
+  "values": { "…/statistics": { "in-octets": "832824572", "out-octets": "8277852" } }
+}
+```
+
+`timestamp_ns` is the router's own notification timestamp. `values` maps the update's
+paths to reported values verbatim — for a container subscription the router answers
+with one value holding the whole statistics dict (counters one level down).
+
 ---
 
 ## 6. MCP tool schemas — agents ↔ tools

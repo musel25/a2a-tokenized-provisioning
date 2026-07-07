@@ -50,3 +50,17 @@ def test_entitlement_view_roundtrips_with_bytes_as_hex():
 def test_decision_output_roundtrips():
     decision = fixtures.DECISION_ACCEPT
     assert DecisionOutput.model_validate_json(decision.model_dump_json()) == decision
+
+
+def test_telemetry_sample_roundtrips():
+    from a2a_interfaces import TelemetrySample
+
+    sample = TelemetrySample(
+        session_id="ent7-a1",
+        path="srl_nokia-interfaces:interface[name=ethernet-1/1]/statistics",
+        timestamp_ns=1783394038730008273,
+        values={"statistics": {"in-octets": "832824572"}},
+    )
+    again = TelemetrySample.model_validate_json(sample.model_dump_json())
+    assert again == sample
+    assert again.v == 0

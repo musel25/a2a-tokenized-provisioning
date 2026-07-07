@@ -21,6 +21,7 @@ from .models import (
     SignedOffer,
     TelemetryNeed,
     TelemetryParams,
+    TelemetrySample,
     TimeWindow,
 )
 from .ports import EntitlementReader, NetworkProvisioner
@@ -43,5 +44,6 @@ __all__ = [
     "SignedOffer",
     "TelemetryNeed",
     "TelemetryParams",
+    "TelemetrySample",
     "TimeWindow",
 ]
