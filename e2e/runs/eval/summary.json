@@ -1,0 +1,683 @@
+{
+ "generated_by": "e2e.experiments",
+ "watch_poll_s": 0.5,
+ "latency": {
+  "det/bandwidth": {
+   "activate_s": {
+    "n": 20,
+    "median": 0.03831188550066145,
+    "mean": 0.04022785159977502,
+    "p95_nearest_rank": 0.05099856800006819,
+    "min": 0.029208003001258476,
+    "max": 0.09004747200015117
+   },
+   "challenge_s": {
+    "n": 20,
+    "median": 0.005498829501448199,
+    "mean": 0.006825695100269513,
+    "p95_nearest_rank": 0.00992487700204947,
+    "min": 0.004683315997681348,
+    "max": 0.010595833999104798
+   },
+   "decide_s": {
+    "n": 20,
+    "median": 1.8649916455615312e-07,
+    "mean": 2.1489959181053564e-07,
+    "p95_nearest_rank": 4.069988790433854e-07,
+    "min": 1.2600139598362148e-07,
+    "max": 4.3800173443742096e-07
+   },
+   "e2e_request_to_enforced_s": {
+    "n": 20,
+    "median": 0.08870707099777064,
+    "mean": 0.09077314269961789,
+    "p95_nearest_rank": 0.11255758499828517,
+    "min": 0.0705826579942368,
+    "max": 0.12859422900146456
+   },
+   "gnmi_apply_s": {
+    "n": 20,
+    "median": 0.021475617999385577,
+    "mean": 0.02538643029984087,
+    "p95_nearest_rank": 0.030467782999039628,
+    "min": 0.017914785999892047,
+    "max": 0.07846321299803094
+   },
+   "revocation_lag_s": {
+    "n": 20,
+    "median": 0.4785061604998191,
+    "mean": 0.4795744308505164,
+    "p95_nearest_rank": 0.554312418000336,
+    "min": 0.4152727779983252,
+    "max": 0.5569536000002699
+   },
+   "revoke_tx_s": {
+    "n": 20,
+    "median": 0.019032999500268488,
+    "mean": 0.017510093400414917,
+    "p95_nearest_rank": 0.022247056000196608,
+    "min": 0.011006673998053884,
+    "max": 0.023215178000100423
+   },
+   "settle_s": {
+    "n": 20,
+    "median": 0.038028073498935555,
+    "mean": 0.037471281299986,
+    "p95_nearest_rank": 0.04710984200210078,
+    "min": 0.027393106000090484,
+    "max": 0.0478062520014646
+   },
+   "sign_offer_s": {
+    "n": 20,
+    "median": 0.003499188500427408,
+    "mean": 0.003351215450493328,
+    "p95_nearest_rank": 0.0041482790002191905,
+    "min": 0.0026021099984063767,
+    "max": 0.004202722000627546
+   },
+   "sign_proof_s": {
+    "n": 20,
+    "median": 0.0025902875004248926,
+    "mean": 0.0028968843495022155,
+    "p95_nearest_rank": 0.004110779998882208,
+    "min": 0.002264456998091191,
+    "max": 0.004229704998579109
+   },
+   "verify_readback_s": {
+    "n": 20,
+    "median": 0.01811501900010626,
+    "mean": 0.01886799864987552,
+    "p95_nearest_rank": 0.02495330699821352,
+    "min": 0.014429233997361735,
+    "max": 0.024982517999887932
+   }
+  },
+  "det/telemetry": {
+   "activate_s": {
+    "n": 20,
+    "median": 0.03881653799908236,
+    "mean": 0.038403303850464,
+    "p95_nearest_rank": 0.04526465900198673,
+    "min": 0.02761011300026439,
+    "max": 0.047137773002759786
+   },
+   "challenge_s": {
+    "n": 20,
+    "median": 0.00788169299994479,
+    "mean": 0.007481407450177358,
+    "p95_nearest_rank": 0.009243831998901442,
+    "min": 0.004670249003538629,
+    "max": 0.010326215000532102
+   },
+   "decide_s": {
+    "n": 20,
+    "median": 1.6300145944114774e-07,
+    "mean": 1.805005013011396e-07,
+    "p95_nearest_rank": 2.730012056417763e-07,
+    "min": 1.0800067684613168e-07,
+    "max": 3.1500167096965015e-07
+   },
+   "e2e_request_to_enforced_s": {
+    "n": 20,
+    "median": 0.08898263099581527,
+    "mean": 0.08744725790038502,
+    "p95_nearest_rank": 0.10326456300026621,
+    "min": 0.06798841600539163,
+    "max": 0.10588268000356038
+   },
+   "gnmi_apply_s": {
+    "n": 20,
+    "median": 0.022515176500746747,
+    "mean": 0.022613157500200032,
+    "p95_nearest_rank": 0.027388611000787932,
+    "min": 0.017653366001468385,
+    "max": 0.028331050998531282
+   },
+   "revocation_lag_s": {
+    "n": 20,
+    "median": 0.4840986295002949,
+    "mean": 0.480473345700193,
+    "p95_nearest_rank": 0.49457510000138427,
+    "min": 0.40926700300042285,
+    "max": 0.5000943729974097
+   },
+   "revoke_tx_s": {
+    "n": 20,
+    "median": 0.018402008998236852,
+    "mean": 0.017674264649758697,
+    "p95_nearest_rank": 0.021843361002538586,
+    "min": 0.010766180999780772,
+    "max": 0.022153938996780198
+   },
+   "settle_s": {
+    "n": 20,
+    "median": 0.037492491501325276,
+    "mean": 0.035608815799787405,
+    "p95_nearest_rank": 0.04332537699883687,
+    "min": 0.02416122899740003,
+    "max": 0.054605208002612926
+   },
+   "sign_offer_s": {
+    "n": 20,
+    "median": 0.00262929650125443,
+    "mean": 0.0030023125502339097,
+    "p95_nearest_rank": 0.003805623000516789,
+    "min": 0.0024300330005644355,
+    "max": 0.003933185998903355
+   },
+   "sign_proof_s": {
+    "n": 20,
+    "median": 0.0032113239994941978,
+    "mean": 0.002951237749221036,
+    "p95_nearest_rank": 0.0035820239972963464,
+    "min": 0.0022745349997421727,
+    "max": 0.0035930779995396733
+   },
+   "verify_readback_s": {
+    "n": 20,
+    "median": 0.020868116000201553,
+    "mean": 0.02069884140037175,
+    "p95_nearest_rank": 0.024032306999288267,
+    "min": 0.015386300001409836,
+    "max": 0.026054248999571428
+   }
+  },
+  "llm/bandwidth": {
+   "activate_s": {
+    "n": 20,
+    "median": 0.03781479099961871,
+    "mean": 0.041779907999443824,
+    "p95_nearest_rank": 0.05120549099956406,
+    "min": 0.028255080000235466,
+    "max": 0.10429459899751237
+   },
+   "challenge_s": {
+    "n": 20,
+    "median": 0.0074189999995724065,
+    "mean": 0.007158938050088182,
+    "p95_nearest_rank": 0.009546766999847023,
+    "min": 0.004717806998087326,
+    "max": 0.010984722997818608
+   },
+   "decide_s": {
+    "n": 20,
+    "median": 1.6443954325004597,
+    "mean": 1.658832755849835,
+    "p95_nearest_rank": 1.7325178120008786,
+    "min": 1.6225650609994773,
+    "max": 1.733342357998481
+   },
+   "e2e_request_to_enforced_s": {
+    "n": 20,
+    "median": 3.1833167054974183,
+    "mean": 3.2079792967486354,
+    "p95_nearest_rank": 3.353749706999224,
+    "min": 3.095270026995422,
+    "max": 3.6242901219957275
+   },
+   "gnmi_apply_s": {
+    "n": 20,
+    "median": 0.022720246497556218,
+    "mean": 0.026478996850164548,
+    "p95_nearest_rank": 0.0326703130012902,
+    "min": 0.017902648000017507,
+    "max": 0.08531200600191369
+   },
+   "quote_s": {
+    "n": 20,
+    "median": 1.4065454354986286,
+    "mean": 1.4390637414497178,
+    "p95_nearest_rank": 1.509341155000584,
+    "min": 1.3868128129979596,
+    "max": 1.8019140489996062
+   },
+   "revocation_lag_s": {
+    "n": 20,
+    "median": 0.4091391615002067,
+    "mean": 0.4030774349001149,
+    "p95_nearest_rank": 0.4831775849997939,
+    "min": 0.25576561400157516,
+    "max": 0.49019734499961487
+   },
+   "revoke_tx_s": {
+    "n": 20,
+    "median": 0.01688142249986413,
+    "mean": 0.01625681749992509,
+    "p95_nearest_rank": 0.020631074999982957,
+    "min": 0.01144286000271677,
+    "max": 0.022548337001353502
+   },
+   "settle_s": {
+    "n": 20,
+    "median": 0.04882253650066559,
+    "mean": 0.04956087640039186,
+    "p95_nearest_rank": 0.060012245001416886,
+    "min": 0.03442323199851671,
+    "max": 0.06123998100156314
+   },
+   "sign_offer_s": {
+    "n": 20,
+    "median": 0.008764252999753808,
+    "mean": 0.008649367699945287,
+    "p95_nearest_rank": 0.011005912001564866,
+    "min": 0.005450436001410708,
+    "max": 0.011283994001132669
+   },
+   "sign_proof_s": {
+    "n": 20,
+    "median": 0.002961063999464386,
+    "mean": 0.0029337092992136604,
+    "p95_nearest_rank": 0.0036593869990610983,
+    "min": 0.0022703009999531787,
+    "max": 0.004554787999950349
+   },
+   "verify_readback_s": {
+    "n": 20,
+    "median": 0.018718782999712857,
+    "mean": 0.019434799150076287,
+    "p95_nearest_rank": 0.024271367998153437,
+    "min": 0.015382297002361156,
+    "max": 0.028720662001433084
+   }
+  },
+  "llm/telemetry": {
+   "activate_s": {
+    "n": 20,
+    "median": 0.034980001000803895,
+    "mean": 0.036269700449702215,
+    "p95_nearest_rank": 0.04355272699831403,
+    "min": 0.02823679400171386,
+    "max": 0.052948437001759885
+   },
+   "challenge_s": {
+    "n": 20,
+    "median": 0.007618782499775989,
+    "mean": 0.00743917035015329,
+    "p95_nearest_rank": 0.009835630000452511,
+    "min": 0.004775492001499515,
+    "max": 0.012342867998086149
+   },
+   "decide_s": {
+    "n": 20,
+    "median": 1.8342746369980887,
+    "mean": 1.8388725507498749,
+    "p95_nearest_rank": 1.912273402998835,
+    "min": 1.7945373760012444,
+    "max": 1.9281114189980144
+   },
+   "e2e_request_to_enforced_s": {
+    "n": 20,
+    "median": 3.300569850502143,
+    "mean": 3.302176563849207,
+    "p95_nearest_rank": 3.3727040339945233,
+    "min": 3.238780309995491,
+    "max": 3.413499097998283
+   },
+   "gnmi_apply_s": {
+    "n": 20,
+    "median": 0.02081672050189809,
+    "mean": 0.021112604499830923,
+    "p95_nearest_rank": 0.02512685799956671,
+    "min": 0.0167075350000232,
+    "max": 0.028512476001196774
+   },
+   "quote_s": {
+    "n": 20,
+    "median": 1.3656455965010537,
+    "mean": 1.3566742668497682,
+    "p95_nearest_rank": 1.4022533009992912,
+    "min": 1.2810937449976336,
+    "max": 1.444914477000566
+   },
+   "revocation_lag_s": {
+    "n": 20,
+    "median": 0.2664820405007049,
+    "mean": 0.3082779985501475,
+    "p95_nearest_rank": 0.4077819289996114,
+    "min": 0.23748651900314144,
+    "max": 0.6469381610004348
+   },
+   "revoke_tx_s": {
+    "n": 20,
+    "median": 0.018311899999389425,
+    "mean": 0.017829094200351392,
+    "p95_nearest_rank": 0.02195438600028865,
+    "min": 0.011272043000644771,
+    "max": 0.023461191998649156
+   },
+   "settle_s": {
+    "n": 20,
+    "median": 0.05011456349893706,
+    "mean": 0.051056142249944966,
+    "p95_nearest_rank": 0.06515897899953416,
+    "min": 0.042839818001084495,
+    "max": 0.06763996200243128
+   },
+   "sign_offer_s": {
+    "n": 20,
+    "median": 0.00923314149986254,
+    "mean": 0.008831600200028333,
+    "p95_nearest_rank": 0.010507381000934402,
+    "min": 0.0035101360008411575,
+    "max": 0.011862788000144064
+   },
+   "sign_proof_s": {
+    "n": 20,
+    "median": 0.003173739498379291,
+    "mean": 0.0030331329997352443,
+    "p95_nearest_rank": 0.0034689860003709327,
+    "min": 0.002270824999868637,
+    "max": 0.0047577830009686295
+   },
+   "verify_readback_s": {
+    "n": 20,
+    "median": 0.020814963998418534,
+    "mean": 0.01977786220031703,
+    "p95_nearest_rank": 0.023896694998256862,
+    "min": 0.015392609002446989,
+    "max": 0.02515665000100853
+   }
+  }
+ },
+ "gas": {
+  "bandwidth": {
+   "approve": {
+    "n": 40,
+    "median": 46366.0,
+    "mean": 46366.0,
+    "p95_nearest_rank": 46366,
+    "min": 46366,
+    "max": 46366
+   },
+   "fulfill": {
+    "n": 40,
+    "median": 268050.0,
+    "mean": 270611.4,
+    "p95_nearest_rank": 268050,
+    "min": 268026,
+    "max": 319350
+   },
+   "revoke": {
+    "n": 40,
+    "median": 29903.0,
+    "mean": 29903.0,
+    "p95_nearest_rank": 29903,
+    "min": 29903,
+    "max": 29903
+   }
+  },
+  "telemetry": {
+   "approve": {
+    "n": 40,
+    "median": 46366.0,
+    "mean": 46366.0,
+    "p95_nearest_rank": 46366,
+    "min": 46366,
+    "max": 46366
+   },
+   "fulfill": {
+    "n": 40,
+    "median": 447371.0,
+    "mean": 447368.0,
+    "p95_nearest_rank": 447371,
+    "min": 447347,
+    "max": 447371
+   },
+   "revoke": {
+    "n": 40,
+    "median": 29903.0,
+    "mean": 29903.0,
+    "p95_nearest_rank": 29903,
+    "min": 29903,
+    "max": 29903
+   }
+  }
+ },
+ "runs_total": 80,
+ "runs_ok": 80,
+ "failures": [],
+ "expiry_tick_to_deconfig_s": {
+  "n": 10,
+  "median": 0.07302597499983676,
+  "mean": 0.07371174869986134,
+  "p95_nearest_rank": 0.08526010300192866,
+  "min": 0.06539382699702401,
+  "max": 0.08526010300192866
+ },
+ "baseline": {
+  "apply_s": {
+   "n": 20,
+   "median": 0.019753416498133447,
+   "mean": 0.023365024449412887,
+   "p95_nearest_rank": 0.025024418002431048,
+   "min": 0.0164111710000725,
+   "max": 0.08943625199754024
+  },
+  "teardown_s": {
+   "n": 20,
+   "median": 0.0779588679997687,
+   "mean": 0.07804109574990434,
+   "p95_nearest_rank": 0.09074649499962106,
+   "min": 0.06377859300118871,
+   "max": 0.0953864959992643
+  }
+ },
+ "adversarial": {
+  "total": 13,
+  "rejected": 12,
+  "allowed_by_design": 1,
+  "rows": [
+   {
+    "exp": "adversarial",
+    "attack": "activate before window start",
+    "rejected": true,
+    "layer": "controller",
+    "code": "E_NOT_STARTED",
+    "expected_layer": "controller"
+   },
+   {
+    "exp": "adversarial",
+    "attack": "replay a consumed offer (same salt)",
+    "rejected": true,
+    "layer": "contract",
+    "code": "OfferAlreadyUsed",
+    "expected_layer": "contract"
+   },
+   {
+    "exp": "adversarial",
+    "attack": "forged provider signature",
+    "rejected": true,
+    "layer": "contract",
+    "code": "BadSignature",
+    "expected_layer": "contract"
+   },
+   {
+    "exp": "adversarial",
+    "attack": "fulfill a lapsed offer (valid_until past)",
+    "rejected": true,
+    "layer": "contract",
+    "code": "OfferExpired",
+    "expected_layer": "contract"
+   },
+   {
+    "exp": "adversarial",
+    "attack": "activation proof signed by a non-owner",
+    "rejected": true,
+    "layer": "controller",
+    "code": "E_NOT_OWNER",
+    "expected_layer": "controller"
+   },
+   {
+    "exp": "adversarial",
+    "attack": "garbage activation signature",
+    "rejected": true,
+    "layer": "controller",
+    "code": "E_NOT_OWNER",
+    "expected_layer": "controller"
+   },
+   {
+    "exp": "adversarial",
+    "attack": "replay a consumed challenge nonce",
+    "rejected": true,
+    "layer": "controller",
+    "code": "E_NONCE_REUSED",
+    "expected_layer": "controller"
+   },
+   {
+    "exp": "adversarial",
+    "attack": "activate the same ticket twice (double-booking)",
+    "rejected": true,
+    "layer": "controller",
+    "code": "E_CONFLICT",
+    "expected_layer": "controller"
+   },
+   {
+    "exp": "adversarial",
+    "attack": "second ticket on the same resource",
+    "rejected": false,
+    "layer": null,
+    "code": null,
+    "by_design": "capacity is guarded at the provider's CapacityLedger (quote time), not the controller; E_CONFLICT is per-ticket"
+   },
+   {
+    "exp": "adversarial",
+    "attack": "telemetry action on a bandwidth ticket (scope)",
+    "rejected": true,
+    "layer": "controller",
+    "code": "E_SCOPE",
+    "expected_layer": "controller"
+   },
+   {
+    "exp": "adversarial",
+    "attack": "activate a revoked ticket",
+    "rejected": true,
+    "layer": "controller",
+    "code": "E_REVOKED",
+    "expected_layer": "controller"
+   },
+   {
+    "exp": "adversarial",
+    "attack": "challenge for a nonexistent ticket",
+    "rejected": true,
+    "layer": "controller",
+    "code": "E_UNKNOWN_ENTITLEMENT",
+    "expected_layer": "controller"
+   },
+   {
+    "exp": "adversarial",
+    "attack": "activate after window end",
+    "rejected": true,
+    "layer": "controller",
+    "code": "E_EXPIRED",
+    "expected_layer": "controller"
+   }
+  ]
+ },
+ "llm": {
+  "quote": {
+   "n": 10,
+   "valid": 10,
+   "in_range": 10,
+   "latency_s": {
+    "n": 10,
+    "median": 1.4487976474993047,
+    "mean": 1.5102152958999795,
+    "p95_nearest_rank": 1.7411170280029182,
+    "min": 1.3850330999994185,
+    "max": 1.7411170280029182
+   },
+   "attempts": {
+    "n": 10,
+    "median": 1.0,
+    "mean": 1.0,
+    "p95_nearest_rank": 1.0,
+    "min": 1.0,
+    "max": 1.0
+   }
+  },
+  "decide": {
+   "n": 12,
+   "valid": 12,
+   "correct": 12,
+   "correct_nonboundary": 9,
+   "n_nonboundary": 9,
+   "quoted_values": [
+    10
+   ],
+   "latency_s": {
+    "n": 12,
+    "median": 1.6489947005011345,
+    "mean": 1.5020422400833315,
+    "p95_nearest_rank": 1.7789427380012057,
+    "min": 1.126727941998979,
+    "max": 1.7789427380012057
+   },
+   "tokens_per_call": {
+    "n": 12,
+    "median": 838.0,
+    "mean": 834.1666666666666,
+    "p95_nearest_rank": 842.0,
+    "min": 825.0,
+    "max": 842.0
+   }
+  },
+  "cost_per_negotiation": {
+   "quote_tokens_median": 276.0,
+   "decide_tokens_median": 838.0,
+   "total_tokens_median": 1114.0,
+   "usd_at_0.20_per_Mtok": 0.000223,
+   "usd_at_2.00_per_Mtok": 0.002228
+  }
+ },
+ "predicate": {
+  "allow": 85.7,
+  "E_NOT_OWNER": 51.0,
+  "E_NOT_STARTED": 55.9,
+  "E_EXPIRED": 65.0,
+  "E_REVOKED": 70.4,
+  "E_SCOPE": 78.5,
+  "E_CONFLICT": 82.6
+ },
+ "revlag_sweep": {
+  "0.1": {
+   "n": 6,
+   "median": 0.1820527835025132,
+   "mean": 0.18328275933466406,
+   "p95_nearest_rank": 0.2053287850030756,
+   "min": 0.1629805659977137,
+   "max": 0.2053287850030756
+  },
+  "0.25": {
+   "n": 6,
+   "median": 0.2476180400008161,
+   "mean": 0.24457820983358639,
+   "p95_nearest_rank": 0.2657514579987037,
+   "min": 0.21875345000080415,
+   "max": 0.2657514579987037
+  },
+  "0.5": {
+   "n": 6,
+   "median": 0.508239141499871,
+   "mean": 0.49201880283241434,
+   "p95_nearest_rank": 0.5138405969992164,
+   "min": 0.45415042199965683,
+   "max": 0.5138405969992164
+  },
+  "1.0": {
+   "n": 6,
+   "median": 0.9899496354992152,
+   "mean": 0.9927646521664428,
+   "p95_nearest_rank": 1.0078209999992396,
+   "min": 0.98708502700174,
+   "max": 1.0078209999992396
+  },
+  "2.0": {
+   "n": 6,
+   "median": 1.99882363550023,
+   "mean": 1.9969330740004807,
+   "p95_nearest_rank": 2.0142565140013176,
+   "min": 1.964987495000969,
+   "max": 2.0142565140013176
+  }
+ }
+}

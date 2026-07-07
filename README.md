@@ -17,7 +17,8 @@ deterministic controller honors it by shaping the router — no human, no prior 
 2. [`docs/03-interfaces.md`](docs/03-interfaces.md) — the precise schemas (the published language)
 3. [`docs/01-implementation-plan.md`](docs/01-implementation-plan.md) — milestones and the current state
 4. [`docs/adr/`](docs/adr/) — one page per architectural decision
-5. [`DESIGN.md`](DESIGN.md) — the full formal plan
+5. [`docs/09-evaluation.md`](docs/09-evaluation.md) — the feasibility numbers and their boundaries
+6. [`DESIGN.md`](DESIGN.md) — the full formal plan
 
 ## Packages (import direction: downward only)
 

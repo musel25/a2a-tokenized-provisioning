@@ -61,6 +61,10 @@ class LLMClient:
     def __init__(self, config: LLMConfig | None = None) -> None:
         self._config = config or LLMConfig.from_env()
         self._client = OpenAI(base_url=self._config.base_url, api_key=self._config.api_key)
+        # Observability for evaluation (docs/09): what the LAST structured() call cost.
+        # Read-only breadcrumbs — no behavior depends on them.
+        self.last_attempts: int = 0
+        self.last_usage: dict = {}
 
     def structured(self, system: str, user: str, schema: type[T]) -> T:
         """Return an instance of `schema`, or raise StructuredError after the retries.
@@ -79,9 +83,11 @@ class LLMClient:
             "fences:\n" + json.dumps(schema_json)
         )
         attempts: list[str] = []
+        self.last_usage = {}
         for _ in range(self._config.max_retries):
             reply = self._chat(system + "\n\n" + instruction, user)
             attempts.append(reply)
+            self.last_attempts = len(attempts)
             try:
                 return schema.model_validate_json(_extract_json(reply))
             except (ValidationError, ValueError):
@@ -97,6 +103,14 @@ class LLMClient:
                 {"role": "user", "content": user},
             ],
         )
+        usage = getattr(response, "usage", None)  # stub servers/tests may omit it
+        if usage is not None:  # accumulate across retries within one structured()
+            self.last_usage = {
+                "prompt_tokens": self.last_usage.get("prompt_tokens", 0)
+                + (usage.prompt_tokens or 0),
+                "completion_tokens": self.last_usage.get("completion_tokens", 0)
+                + (usage.completion_tokens or 0),
+            }
         return response.choices[0].message.content or ""
 
 

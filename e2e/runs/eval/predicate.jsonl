@@ -1,0 +1,7 @@
+{"exp": "predicate", "outcome": "allow", "ns_per_call": 85.70106499973917, "loops": 200000}
+{"exp": "predicate", "outcome": "E_NOT_OWNER", "ns_per_call": 50.9783800043806, "loops": 200000}
+{"exp": "predicate", "outcome": "E_NOT_STARTED", "ns_per_call": 55.938505010999506, "loops": 200000}
+{"exp": "predicate", "outcome": "E_EXPIRED", "ns_per_call": 65.00583000160987, "loops": 200000}
+{"exp": "predicate", "outcome": "E_REVOKED", "ns_per_call": 70.36337499812362, "loops": 200000}
+{"exp": "predicate", "outcome": "E_SCOPE", "ns_per_call": 78.5418949999439, "loops": 200000}
+{"exp": "predicate", "outcome": "E_CONFLICT", "ns_per_call": 82.57483499619411, "loops": 200000}

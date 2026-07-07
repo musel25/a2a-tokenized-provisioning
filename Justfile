@@ -27,6 +27,15 @@ explorer:
 explorer-down:
     docker rm -f a2a-otterscan
 
+# run the evaluation campaign (docs/09) → e2e/runs/eval/. Needs the lab; source .env for
+# --mode llm. Then re-render the figures notebook. `--exp predicate` needs neither.
+eval n="20":
+    uv run python -m e2e.experiments --exp all --n {{n}}
+    uv run python -m e2e.experiments --exp predicate
+    uv run --group demo jupyter nbconvert --to notebook --execute --inplace \
+      e2e/notebooks/evaluation_explore.ipynb
+    @echo "report: docs/09-evaluation.md · figures: e2e/notebooks/evaluation_explore.ipynb"
+
 # the interactive operator console → http://127.0.0.1:8099
 # Click "Ada, get me this" to drive the real pipeline (agents → chain → controller →
 # router) and watch it in the trust relay. Bring the SR Linux lab up first for live
