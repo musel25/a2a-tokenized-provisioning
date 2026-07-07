@@ -1,9 +1,9 @@
-"""The stub controller: the naive predicate plus a minimal session machine.
+"""The stub controller: a minimal session machine around the REAL predicate.
 
-This is where the authorization predicate first appears — two phases before the real
-controller (M4.1) — so the concept is in hand early. The predicate is pure (rule 4):
-it decides over data the controller already fetched, importing no chain, network, or
-clock. M4.1 lifts it verbatim into controller/domain.py and hardens it.
+The predicate was born here (M0.3) so the concept was in hand early; M4.1 lifted it
+into controller/domain.py, hardened it, and this stub now imports that one — exactly
+one bouncer exists in the codebase. What stays stubby here is everything around it:
+the nonce set, the session dict, the synchronous wiring.
 """
 
 from __future__ import annotations
@@ -19,11 +19,10 @@ from a2a_interfaces import (
     SessionState,
 )
 from a2a_interfaces.fixtures import RESOURCE_ID, RESOLVED_PATH
+from controller.domain import predicate as _domain_predicate
 
-# serviceType values this controller knows how to honor. Telemetry (1) is a real
-# serviceType (docs/03 §4.2) but activate() only knows apply_bandwidth, so admitting
-# it here would pass the predicate and then crash mid-provision; it joins the tuple
-# when the telemetry translator exists (M3.3/M4.3).
+# This stub still translates bandwidth only — activate() calls apply_bandwidth
+# directly; the per-serviceType translator dispatch is the real controller's (M4.3).
 _KNOWN_SERVICE_TYPES = (0,)  # 0 = bandwidth
 
 # Stand-in for controller/resource_map.yaml (rule 6 / ADR-005): the real
@@ -59,25 +58,10 @@ def predicate(
     now: int,
     active_ids: set[int],
 ) -> ErrorCode | None:
-    """Return None if activation is allowed, else the first failing ErrorCode.
-
-    Five boring checks, in order: who, when (start, end), revoked, scope, conflict.
-    `now` is chain time (ADR-004); `owner` is owner_of(id); `active_ids` is the set of
-    entitlements with a currently-active session (the no-double-booking guard).
-    """
-    if requester != owner:
-        return ErrorCode.E_NOT_OWNER
-    if now < view.start_time:
-        return ErrorCode.E_NOT_STARTED
-    if now >= view.end_time:
-        return ErrorCode.E_EXPIRED
-    if view.revoked:
-        return ErrorCode.E_REVOKED
-    if view.service_type not in _KNOWN_SERVICE_TYPES:
-        return ErrorCode.E_SCOPE
-    if view.id in active_ids:
-        return ErrorCode.E_CONFLICT
-    return None
+    """The domain's predicate, scoped to what THIS stub can translate (bandwidth)."""
+    return _domain_predicate(
+        view, owner, requester, now, active_ids, known_service_types=_KNOWN_SERVICE_TYPES
+    )
 
 
 class StubController:
