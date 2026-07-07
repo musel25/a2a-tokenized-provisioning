@@ -159,6 +159,8 @@
   .chk{display:inline-block; margin-right:6px; font-size:10px}
   .chk.ok{color:var(--network)} .chk.no{color:var(--revoke)}
   .hash{color:var(--chain)}
+  a.hash{text-decoration:none; border-bottom:1px dotted var(--chain)}
+  a.hash:hover{filter:brightness(1.25)}
   /* clickable event rows → expand to the real payload */
   .ev.has-expand{cursor:pointer}
   .ev.has-expand .body .t::after{content:"▸"; color:var(--faint); font-size:9px; margin-left:7px; transition:transform .15s}
@@ -222,6 +224,7 @@
       <span class="pill"><span class="led" id="led-anvil"></span>chain</span>
       <span class="pill"><span class="led" id="led-lab"></span>router</span>
       <span class="pill" id="pill-llm" style="cursor:pointer" title="click to switch between live LLM judgment and the deterministic stand-in"><span class="led" id="led-llm"></span>judgment <b id="jm">—</b></span>
+      <a class="pill" id="pill-exp" href="http://localhost:5100" target="_blank" style="display:none; text-decoration:none" title="Otterscan block explorer over this chain"><span class="led on"></span>explorer ↗</a>
       <span class="pill">chain&nbsp;time <b id="ct">—</b></span>
       <span class="pill"><span class="led on"></span>live</span>
     </div>
@@ -309,7 +312,7 @@
 
 <script>
 const $ = s => document.querySelector(s);
-let service = 'bandwidth', running = false;
+let service = 'bandwidth', running = false, EXPLORER = null;
 
 // chat front door
 function send(){
@@ -345,6 +348,8 @@ async function poll(){
       l.status==='warming' ? l.model+' · warming' :
       l.status==='down' ? l.model+' · down' : 'deterministic';
     $('#led-llm').className = 'led ' + (l.live?'on': l.status==='warming'?'warm': l.status==='down'?'off':'');
+    EXPLORER = (s.explorer && (!s.rpc_url || s.rpc_url.endsWith(':8545'))) ? 'http://localhost:5100' : null;
+    $('#pill-exp').style.display = EXPLORER ? 'inline-flex' : 'none';
     if(s.chain_time){ const d=new Date(s.chain_time*1000);
       $('#ct').textContent = d.toISOString().slice(11,16); }
   }catch(e){}
@@ -388,14 +393,19 @@ function addEv(e){
     predicate:'check',session:'ctrl',teardown:'ctrl',device:'dev',iperf:'iperf',done:'done',
     error:'error',stage:'—',boot:'boot',thinking:'llm'})[e.kind] || e.kind;
   let detail = e.detail||'';
-  if(e.kind==='chain_tx' && e.tx_hash) detail = detail.replace(e.tx_hash.slice(0,18), `<span class="hash">${e.tx_hash.slice(0,18)}</span>`);
+  if(e.kind==='chain_tx' && e.tx_hash){
+    const h = e.tx_hash.slice(0,18);
+    detail = detail.replace(h, EXPLORER
+      ? `<a class="hash" href="${EXPLORER}/tx/${e.tx_hash}" target="_blank" title="open in the block explorer">${h} ↗</a>`
+      : `<span class="hash">${h}</span>`);
+  }
   if(e.kind==='predicate') detail = e.checks.map(c=>`<span class="chk ${c.ok?'ok':'no'}">${c.ok?'✓':'✗'}</span>${c.name}`).join(' ');
   div.innerHTML = `<div class="tag">${tag}</div><div class="body"><div class="t">${e.title||''}</div><div class="d">${detail}</div></div>`;
   if(e.expand){
     div.classList.add('has-expand');
     const det = document.createElement('div'); det.className='ev-detail'; det.innerHTML = renderExpand(e.expand);
     div.querySelector('.body').appendChild(det);
-    div.addEventListener('click', () => div.classList.toggle('open'));
+    div.addEventListener('click', ev => { if(ev.target.closest('a')) return; div.classList.toggle('open'); });
   }
   s.appendChild(div); s.scrollTop = s.scrollHeight;
 }
