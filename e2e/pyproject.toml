@@ -8,6 +8,7 @@ dependencies = [
     "chainmcp",
     "netctl",
     "controller",
+    "agents",
 ]
 
 [build-system]
@@ -22,3 +23,4 @@ a2a-interfaces = { workspace = true }
 chainmcp = { workspace = true }
 netctl = { workspace = true }
 controller = { workspace = true }
+agents = { workspace = true }

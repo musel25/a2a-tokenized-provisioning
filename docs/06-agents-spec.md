@@ -49,11 +49,30 @@ an immediate `Decline` with no LLM asked. `quote` is the LLM slot: price the off
 decline for business reasons (a business decline releases the tentatively-reserved
 slot). What crosses the A2A wire is a `SignedOffer` or a `Decline` (docs/03 §1.2).
 
-## 5. MCP servers (M5.4) — *lands with M5.4*
+## 5. MCP servers (M5.4)
 
-## 6. A2A discovery (M5.5) — *lands with M5.5*
+Each agent runs its own `chainmcp` instance (its key); the graph reaches the chain only
+through `chain_tools(client)` callables (the §6.1 operations) or the FastMCP shell
+`build_chain_mcp(client)` for cross-process agents. `ChainConsumerTools`/
+`ChainProviderTools` implement the graphs' Protocols, so stubs → real is a zero-graph-code
+swap. `ctrl-mcp` is the consumer tool's three HTTP calls to the M4.4 controller.
 
-## 7. Skeleton v4 (M5.6) — *lands with M5.6*
+## 6. A2A discovery (M5.5)
+
+The a2a SDK is confined to `a2a_adapter.py` (ADR-002, pinned `a2a-sdk==0.3.26` — the
+JSON-card 0.3.x line, not the protobuf 1.x rewrite). Provider cards carry one `quote_*`
+skill; `registry.json` lists them. Domain payloads travel as JSON data parts. Integrity
+is inherited, not added: a tampered offer in transit dies at the contract's
+`BadSignature` (M1.3).
+
+## 7. Skeleton v4 (M5.6)
+
+The `full` profile: the real consumer and provider graphs drive the lifecycle against
+real chainmcp tools, a real controller, and real Anvil state — the skeleton test is now
+the system test. Because judgment is nondeterministic, the tests assert VALID BEHAVIOR
+(schema + invariants), branching on accept/decline, not one fixed path. A deterministic
+variant (controllable fake LLM) proves the wiring in CI; an opt-in `A2A_LIVE_LLM=1`
+variant drives the same graphs with real judgment on a fast model.
 
 ---
 
