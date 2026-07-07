@@ -88,6 +88,13 @@ def build_app() -> FastAPI:
         _run(lambda emit: CONSOLE.revoke(emit))
         return {"started": "revoke"}
 
+    @app.post("/api/llm/toggle")
+    def llm_toggle() -> dict:
+        """Operator switch: mute/unmute live judgment (contrast LLM vs deterministic
+        without restarting). Only meaningful when an endpoint is configured and warm."""
+        CONSOLE.llm_muted = not CONSOLE.llm_muted
+        return CONSOLE.status()["llm"]
+
     @app.post("/api/reset")
     def reset() -> dict:
         CONSOLE.reset()

@@ -31,11 +31,43 @@ deterministic controller honors it by shaping the router — no human, no prior 
 | [`controller`](controller/) | the bouncer: predicate, auth, translators — never an LLM |
 | [`agents`](agents/) | LangGraph brains; LLM judgment at exactly two points |
 | [`e2e`](e2e/) | the stage: skeleton, lifecycle tests, dashboard |
+| [`llmserve`](llmserve/) | the agents' LLM, deployed (Modal vLLM); infra, not imported |
 
-## Quickstart
+## Run the live demo — the operator console
 
 ```sh
-uv sync --all-packages   # one lockfile, all workspace members
+# one-time setup
+uv sync --all-packages                             # python workspace
+forge build --root contracts                       # contract artifacts (needs Foundry)
+
+# each session
+containerlab deploy -t netlab/topology.clab.yml    # the network (SR Linux srl1 + hosts)
+just console                                       # → http://127.0.0.1:8099
+```
+
+Open the console, tell Ada what you want ("get me 50 Mbps under 12 TOK"), and watch the
+request cross agents → chain → controller → router, live. `Revoke` kills it mid-window.
+Teardown: `containerlab destroy -t netlab/topology.clab.yml` (the console's chain is
+per-session; nothing else persists).
+
+**Choosing the judgment mode.** With no `.env`, the two judgment slots run deterministic
+stand-ins (instant, offline). To make them *real model judgments*, deploy the LLM once
+and write `.env` (full steps: [`llmserve/README.md`](llmserve/README.md)):
+
+```sh
+uv run modal setup                                              # once per machine
+uv run modal secret create a2a-llm-key LLM_API_KEY=$(openssl rand -hex 16)
+uv run modal deploy llmserve/modal_llm.py                       # → your /v1 endpoint
+cp .env.example .env                                            # fill in URL + token
+```
+
+Restart `just console` — the header pill turns `judgment · qwen3-4b`. **Click the pill**
+to flip between live LLM and deterministic at any time (great for contrasting the two);
+if the network dies, the console falls back deterministically on its own.
+
+## Quickstart (development)
+
+```sh
 uv run pytest            # unit + lifecycle (mock) + chainmcp's live-Anvil cross-stack
                          #   tests (those skip unless `forge build` ran in contracts/)
 SKELETON_PROFILE=chain \
