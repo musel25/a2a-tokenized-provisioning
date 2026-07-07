@@ -170,6 +170,16 @@ class SignedOffer(_Frozen):
     terms_doc: dict[str, Any]
 
 
+class Decline(_Frozen):
+    """A provider's answer when it cannot (or chooses not to) commit — the overselling
+    guard's output on the A2A wire (docs/03 §1.2). A quote request yields SignedOffer
+    OR Decline; the consumer branches on which."""
+
+    v: Literal[0] = 0
+    declined: Literal[True] = True
+    reason: str
+
+
 # --- Activation API payloads (§3.1) — consumer agent ↔ controller -----------
 # The §3.1 examples elide the "v" field for brevity; the §0 convention (every JSON
 # payload carries v) wins here, as a validated default.
