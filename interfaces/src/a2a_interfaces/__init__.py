@@ -6,6 +6,13 @@ See docs/03-interfaces.md and CLAUDE.md rules 1-4.
 """
 
 from .models import (
+    ActionPayload,
+    ActivateRequest,
+    ChallengeRequest,
+    ChallengeResponse,
+    ProofPayload,
+    SessionInfo,
+    TeardownRequest,
     V,
     ApplyResult,
     BandwidthNeed,
@@ -27,6 +34,13 @@ from .models import (
 from .ports import EntitlementReader, NetworkProvisioner
 
 __all__ = [
+    "ActionPayload",
+    "ActivateRequest",
+    "ChallengeRequest",
+    "ChallengeResponse",
+    "ProofPayload",
+    "SessionInfo",
+    "TeardownRequest",
     "V",
     "ApplyResult",
     "BandwidthNeed",
