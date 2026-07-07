@@ -207,9 +207,71 @@ provider's domain; policing in the core would waste the core's capacity carrying
 packets you intend to drop. (In the shim it's *materialized* on the egress port — a
 lab-only displacement with identical effect for this topology.)
 
-## 7. Telemetry, by hand (M2.3) — *lands with M2.3*
+## 7. Telemetry, by hand (M2.3): gNMI's third verb, seen raw
 
-## 7. Telemetry, by hand (M2.3) — *lands with M2.3*
+Chapter 6's product was a *limit*; chapter 7's product is a *stream* — the same router,
+asked to narrate its own counters. gNMI has three verbs: **Get** (read once), **Set**
+(change config — M3.x's whole job), and **Subscribe** (push me updates). This section
+drives the first and third by hand; Set waits for M3.1 so each new tool lands alone.
+
+### 7.1 Install gnmic (no sudo: user-local binary)
+
+```sh
+mkdir -p ~/.local/bin      # on PATH
+VER=$(curl -s https://api.github.com/repos/openconfig/gnmic/releases/latest | jq -r .tag_name)
+curl -sL "https://github.com/openconfig/gnmic/releases/download/${VER}/gnmic_${VER#v}_Linux_x86_64.tar.gz" \
+  | tar -xz -C ~/.local/bin gnmic
+gnmic version          # 0.46.0 at time of writing
+```
+
+### 7.2 Talk to srl1 (and the two gotchas)
+
+Containerlab enables SR Linux's gNMI server on `:57400` with a **self-signed TLS cert**;
+`--skip-verify` accepts it. That's fine for a lab and a one-line honesty note: in any
+real deployment you'd pin the CA (containerlab even generates one per lab). Credentials
+are the SR Linux defaults `admin` / `NokiaSrl1!`.
+
+```sh
+gnmic -a clab-a2a-srl1:57400 -u admin -p 'NokiaSrl1!' --skip-verify capabilities | head -2
+# gNMI version: 0.10.0
+```
+
+Gotcha #2: **SR Linux rejects gnmic's default encoding** (`rpc error: … received
+encoding: 0`) — always pass `-e json_ietf`. (M3.1's pygnmi needs the same.)
+
+```sh
+gnmic -a clab-a2a-srl1:57400 -u admin -p 'NokiaSrl1!' --skip-verify -e json_ietf \
+  get --path "/interface[name=ethernet-1/1]/oper-state"
+# "srl_nokia-interfaces:interface/oper-state": "up"
+```
+
+### 7.3 The subscription (the M2.3 acceptance test — real output)
+
+With iperf3 running hostA→hostB, subscribe to the ingress interface's statistics,
+sampled every 10 s:
+
+```sh
+gnmic -a clab-a2a-srl1:57400 -u admin -p 'NokiaSrl1!' --skip-verify -e json_ietf \
+  subscribe --path "/interface[name=ethernet-1/1]/statistics" \
+  --mode stream --stream-mode sample --sample-interval 10s
+```
+```
+"time": "2026-07-07T04:37:03"   in-octets: 761761034
+"time": "2026-07-07T04:37:13"   in-octets: 832824572     ← +71,063,538 bytes
+"time": "2026-07-07T04:37:23"   in-octets: 904751684     ← +71,927,112
+"time": "2026-07-07T04:37:33"   in-octets: 975849124     ← +71,097,440
+```
+
+Do the arithmetic the collector (M3.3) will do forever: `(832824572 − 761761034) × 8
+/ 10 s = 56.9 Mbit/s` — the samples *are* the iperf stream, reconstructed from two
+counter reads. That derivative-of-a-counter is the entire telemetry product Ada buys
+in chapter 7.
+
+Note what "sampling" means here — the router pushes on ITS schedule
+(`sample-interval`), not per request; and the connection is **dial-in** (the collector
+connects to the router), which is exactly the delivery-model question ADR-007 must
+answer for `apply_telemetry` (M3.3).
+
 
 ---
 
