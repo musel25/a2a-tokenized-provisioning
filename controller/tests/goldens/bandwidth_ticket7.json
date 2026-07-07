@@ -1,0 +1,15 @@
+[
+  {
+    "method": "apply_bandwidth",
+    "kwargs": {
+      "session_id": "ent7-a1",
+      "path": {
+        "device": "srl1",
+        "ingress_if": "ethernet-1/1",
+        "egress_if": "ethernet-1/2"
+      },
+      "capacity_bps": 50000000,
+      "qos_class": 1
+    }
+  }
+]
