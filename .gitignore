@@ -35,3 +35,6 @@ e2e/runs/
 
 # machine-local deploy artifact (regenerate with `just deploy-local`)
 deployments/
+
+# containerlab runtime state (root-owned node dirs; the lab is disposable)
+netlab/clab-*/
