@@ -28,34 +28,38 @@ from chainmcp.mcp_server import chain_tools
 
 
 class ChainConsumerTools:
-    """The consumer's tools: fulfill via its own chainmcp, activate via the controller."""
+    """The consumer's tools: fulfill via its own chainmcp, activate via the controller.
 
-    def __init__(self, consumer_chain, controller_url: str) -> None:
+    `http` is an injectable httpx client so the same code drives a live controller
+    (real server) or an in-process one (ASGITransport) — the tests use the latter, the
+    `just up` deployment the former.
+    """
+
+    def __init__(
+        self, consumer_chain, controller_url: str, http: httpx.Client | None = None
+    ) -> None:
         self._chain = chain_tools(consumer_chain)
-        self._client = consumer_chain  # for the activation proof (needs the key)
-        self._controller_url = controller_url
+        self._controller_url = controller_url.rstrip("/")
+        self._http = http or httpx.Client(timeout=10)
 
     def settle(self, offer: SignedOffer) -> int:
         return self._chain["fulfill_offer"](offer.model_dump(mode="json"))["entitlement_id"]
 
     def activate(self, entitlement_id: int) -> str:
         """The deliberate three tool calls (docs/03 §6.2): challenge → sign → submit."""
-        challenge = httpx.post(
-            f"{self._controller_url}/v0/challenge",
-            json={"entitlement_id": entitlement_id},
-            timeout=10,
+        challenge = self._http.post(
+            f"{self._controller_url}/v0/challenge", json={"entitlement_id": entitlement_id}
         ).json()
         proof = self._chain["sign_activation_proof"](
             entitlement_id, challenge["nonce"], challenge["controller_id"], challenge["expires_at"]
         )
-        activation = httpx.post(
+        activation = self._http.post(
             f"{self._controller_url}/v0/activate",
             json={
                 "entitlement_id": entitlement_id,
                 "action": {"kind": "bandwidth"},
                 "proof": {"nonce": challenge["nonce"], "signature": proof["signature"]},
             },
-            timeout=10,
         ).json()
         return activation["session_id"]
 

@@ -27,6 +27,7 @@ version = "0.0.0"
 source = { editable = "e2e" }
 dependencies = [
     { name = "a2a-interfaces" },
+    { name = "agents" },
     { name = "chainmcp" },
     { name = "controller" },
     { name = "netctl" },
@@ -35,6 +36,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "a2a-interfaces", editable = "interfaces" },
+    { name = "agents", editable = "agents" },
     { name = "chainmcp", editable = "chainmcp" },
     { name = "controller", editable = "controller" },
     { name = "netctl", editable = "netctl" },
