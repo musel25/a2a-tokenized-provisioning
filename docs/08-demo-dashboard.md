@@ -12,12 +12,30 @@
 on-chain ticket; a deterministic controller honors the ticket by configuring a real
 router — and when the ticket is revoked on-chain, the bandwidth dies mid-stream.*
 
-## Before the room: bring it up
+## The operator console (M6.4 — the interactive way to run and watch it)
 
 ```sh
-just up                                                   # Anvil → deploy → controller (seconds)
-containerlab deploy -t netlab/topology.clab.yml           # the SR Linux lab (~1 min, ~2 GB)
-uv run --group demo streamlit run e2e/src/e2e/dashboard/app.py   # the live view
+containerlab deploy -t netlab/topology.clab.yml   # the SR Linux lab (~1 min) — for live enforcement
+just console                                       # → http://127.0.0.1:8099
+```
+
+Open the console and press **“Ada, get me this.”** It drives the *real* pipeline —
+Ada's agent negotiates with Bell over A2A, pays on-chain (real EIP-712, real ERC-721,
+real tx hash), the controller authorizes, and a real policer lands on srl1 — and shows
+it as a **trust relay**: the request lights up each domain (agents → chain → controller →
+network) as it crosses it. The **device inspector** reads srl1's live config off the
+router and iperf measures the enforced throughput (~49 Mbps). Toggle **Telemetry** for
+the second service type (samples stream to a live collector). Then hit **Revoke** and
+watch the relay's signal get *cut at the chain* and the throughput jump back to 100 Mbps.
+
+Without the lab the console still runs everything real except the router lane, which says
+so honestly. Events are the same `DashboardEvent` JSONL the file-tailing view uses.
+
+## The file-tailing view (headless / no browser)
+
+```sh
+uv run python -m e2e.dashboard.demo_run                          # writes the epilogue as events
+uv run --group demo streamlit run e2e/src/e2e/dashboard/app.py   # three-column tail
 ```
 
 Local Ollama for the agents' judgment (ADR-001, defense-day rule — no network in the

@@ -10,6 +10,13 @@ up:
 down:
     uv run python -m e2e.bringup down
 
+# the interactive operator console → http://127.0.0.1:8099
+# Click "Ada, get me this" to drive the real pipeline (agents → chain → controller →
+# router) and watch it in the trust relay. Bring the SR Linux lab up first for live
+# enforcement: containerlab deploy -t netlab/topology.clab.yml
+console:
+    uv run --group demo python -m e2e.dashboard.server
+
 # run all Python tests (mock profile)
 test:
     uv run pytest
