@@ -87,7 +87,7 @@ flowchart TB
 ```
 
 This is why the *first* test in the suite checks nothing about behaviour — only that the
-cardboard is the right *shape* ([test_lifecycle.py:62](../e2e/tests/test_lifecycle.py#L62)):
+cardboard is the right *shape* ([test_lifecycle.py:58](../e2e/tests/test_lifecycle.py#L58)):
 
 ```python
 def test_fakes_satisfy_ports():
@@ -213,7 +213,7 @@ def fulfill(self, signed, buyer):
 > made, so the contract may check and mutate in any order. Python has no rollback, so the fake
 > earns atomicity with **ordering alone**: every check runs *before the first mutation*, and a
 > rejected `fulfill` literally never reaches the lines that move money. That ordering is why
-> [the replay test](../e2e/tests/test_lifecycle.py#L108) can prove "Bell was paid once, not
+> [the replay test](../e2e/tests/test_lifecycle.py#L110) can prove "Bell was paid once, not
 > twice," and why the three deny-path tests
 > ([expired / targeted / underfunded](../e2e/tests/test_lifecycle.py#L175)) can each assert the
 > world is untouched. Those four tests are the parity spec M1.3's Foundry revert tests must
@@ -503,10 +503,15 @@ stateDiagram-v2
 
 ## 7. One concrete trace (real numbers, end to end)
 
-Walking [test_happy_path_lifecycle](../e2e/tests/test_lifecycle.py#L70) by hand:
+Walking [test_happy_path_lifecycle](../e2e/tests/test_lifecycle.py#L70) by hand. Since
+M1.5 the wiring lives in the `world` fixture (`e2e/skeleton/worlds.py` + `tests/conftest.py`):
+`SKELETON_PROFILE=mock` builds the `MockWorld` traced below; `SKELETON_PROFILE=chain`
+builds a `ChainWorld` — live Anvil, real contracts, ChainClients — under the *identical
+script* (that swap is skeleton v1; the balance asserts became deltas so both realities
+satisfy them):
 
 ```text
-_new_world():
+MockWorld():
    clock   = FakeClock(1757943120)            # 1757944800 − 1680  ≈ 13:32
    chain   = FakeChain(clock, {Ada: 50e18, Bell: 0}, next_id=7)
    net     = FakeNet()

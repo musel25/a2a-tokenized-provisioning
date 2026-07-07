@@ -36,8 +36,11 @@ deterministic controller honors it by shaping the router — no human, no prior 
 
 ```sh
 uv sync --all-packages   # one lockfile, all workspace members
-uv run pytest            # unit + lifecycle tests (mock profile)
-just                     # list available recipes
+uv run pytest            # unit + lifecycle (mock) + chainmcp's live-Anvil cross-stack
+                         #   tests (those skip unless `forge build` ran in contracts/)
+SKELETON_PROFILE=chain \
+  uv run pytest e2e/     # skeleton v1: the same lifecycle on a real local chain
+just                     # list available recipes (incl. deploy-local)
 ```
 
 Evidence for every completed milestone lives in [`docs/evidence/`](docs/evidence/) —

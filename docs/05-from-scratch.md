@@ -321,6 +321,30 @@ fmt:
 
 ---
 
+## Step 7 — Plumbing added by later milestones (the log continues)
+
+Each entry is the same pattern as the steps above; only the *reason* is new.
+
+**M1.4 — the deploy artifact.**
+- `foundry.toml` gains `fs_permissions = [{ access = "read-write", path = "./deployments" }]`
+  — the deploy script writes `contracts/deployments/anvil.json`, and Foundry denies all
+  fs access it wasn't granted (it also refuses paths above its own root, which is why
+  the artifact lives *inside* contracts/).
+- The Justfile gains `deploy-local` (expects a running Anvil, runs
+  `forge script script/Deploy.s.sol`, prints the artifact).
+- `.gitignore` gains `deployments/` — the artifact is machine-local, regenerate at will.
+
+**M1.5 — the third member: `chainmcp` (and CI learns Foundry).**
+- `chainmcp/pyproject.toml` exactly follows Step 3's cross-member pattern, adding
+  `web3>=7.6` as its one external dependency; root `members` gains `"chainmcp"`, root
+  `testpaths`/`ruff src` gain its paths.
+- `.github/workflows/ci.yml`'s **python** job gains `foundry-rs/foundry-toolchain@v1` +
+  `forge build --root contracts` *before* `uv run pytest`: chainmcp's cross-stack
+  signature tests spawn a live `anvil` and load forge-built ABIs — without Foundry those
+  tests skip, and the one seam nothing else can catch would go unwatched in CI.
+
+---
+
 ## Verify the whole skeleton
 
 ```bash
