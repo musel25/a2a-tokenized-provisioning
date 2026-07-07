@@ -102,6 +102,11 @@ class ChainClient:
                 raise KeyError(entitlement_id) from err
             raise self._as_chain_revert(err) from err
 
+    def token_uri(self, entitlement_id: int) -> str:
+        """The ERC-721 tokenURI: a self-contained data:application/json;base64 URI whose
+        metadata (issuer, serviceType, window, revoked…) lives entirely on-chain (M1.2)."""
+        return self._settlement.functions.tokenURI(entitlement_id).call()
+
     def get(self, entitlement_id: int) -> EntitlementView:
         self.owner_of(entitlement_id)  # existence gate — the struct read can't tell (M1.2)
         (

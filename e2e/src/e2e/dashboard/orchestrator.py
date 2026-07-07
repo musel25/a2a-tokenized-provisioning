@@ -155,11 +155,16 @@ class Console:
             # 1. AGENT — discovery + quote (A2A) and judgment (the LLM slot, shown)
             emit(_stage("agent", "Agents negotiate"))
             emit(_a2a("Ada", "Bell", f"quote_{service}",
-                      f"need {service} · {_mbps(need)} · window 14:00–16:00"))
+                      f"need {service} · {_mbps(need)} · window 14:00–16:00",
+                      expand=_a2a_out(service, need)))
             price = int(offer.offer.price) // 10**18 if service == "bandwidth" else 8
             emit(_mcp("Bell", "chainmcp", "sign_offer",
-                      f"{service} @ {price} TOK", "EIP-712 signature (65 bytes)"))
-            emit(_a2a("Bell", "Ada", "signed_offer", f"{price} TOK · signed"))
+                      f"{service} @ {price} TOK", "EIP-712 signature (65 bytes)",
+                      expand={"server": "chainmcp (Bell's key custody)", "tool": "sign_offer",
+                              "args": {"offer": _clip(offer.offer.model_dump(mode="json"))},
+                              "result": {"signature": offer.signature}}))
+            emit(_a2a("Bell", "Ada", "signed_offer", f"{price} TOK · signed",
+                      expand=_a2a_reply(offer)))
             accept = price <= budget_tok
             emit(_decision("Ada", accept,
                            f"{price} TOK {'≤' if accept else '>'} budget {budget_tok} TOK — "
@@ -171,26 +176,41 @@ class Console:
             # 2. CHAIN — settle: MCP fulfill → real on-chain tx, ticket, payment
             emit(_stage("chain", "Payment for ticket, atomically"))
             tools = chain_tools(self.ada)
-            emit(_mcp("Ada", "chainmcp", "fulfill_offer", f"approve {price} TOK + fulfill", "…"))
+            emit(_mcp("Ada", "chainmcp", "fulfill_offer", f"approve {price} TOK + fulfill", "…",
+                      expand={"server": "chainmcp (Ada's key custody)", "tool": "fulfill_offer",
+                              "args": {"signed_offer": _clip(offer.model_dump(mode="json"))},
+                              "note": "approves ERC-20 then calls A2ASettlement.fulfill — one atomic tx"}))
             result = tools["fulfill_offer"](offer.model_dump(mode="json"))
             eid = result["entitlement_id"]
             self.sessions.setdefault(eid, None)
             block = self.ada._w3.eth.get_block("latest")
             emit(_chain_tx("fulfill", result["tx_hash"], block["number"],
-                           f"ticket #{eid} → Ada · {price} TOK → Bell · salt consumed"))
+                           f"ticket #{eid} → Ada · {price} TOK → Bell · salt consumed",
+                           expand={"method": "A2ASettlement.fulfill(SignedOffer)", "from": "Ada",
+                                   "tx_hash": result["tx_hash"], "block": block["number"],
+                                   "effects": [f"mint ERC-721 #{eid} → Ada", f"transfer {price} TOK Ada → Bell",
+                                               "mark offer salt used (single-use, I2)"]}))
             emit(_chain_read("ownerOf(%d)" % eid, self.ada.owner_of(eid)))
             emit(_chain_read("Bell balance", f"{self.ada.tok_balance(BELL) // 10**18} TOK"))
+            emit(_ticket(self._ticket_view(eid)))  # the NFT panel populates here
 
             # 3. CONTROLLER — challenge → proof → predicate → authorize
             emit(_stage("controller", "Authorize by on-chain ownership"))
             self.anvil.increase_time(self.ada._w3, 1800)  # into the window (14:02)
             challenge = self.controller.challenge(eid)
             emit(_mcp("controller", "ctrl-mcp", "get_challenge",
-                      f"entitlement #{eid}", f"nonce {challenge.nonce[:14]}…"))
+                      f"entitlement #{eid}", f"nonce {challenge.nonce[:14]}…",
+                      expand={"server": "controller HTTP API", "tool": "POST /challenge",
+                              "args": {"entitlement_id": eid},
+                              "result": {"controller_id": challenge.controller_id, "nonce": challenge.nonce,
+                                         "expires_at": challenge.expires_at}}))
             msg = proof_message(challenge.controller_id, challenge.nonce, eid, challenge.expires_at)
             sig = "0x" + self.ada._acct.sign_message(_defunct(msg)).signature.hex()
             emit(_mcp("Ada", "chainmcp", "sign_activation_proof",
-                      "a2a-activate|…", "EIP-191 signature"))
+                      "a2a-activate|…", "EIP-191 signature",
+                      expand={"server": "chainmcp (Ada's key custody)", "tool": "sign_activation_proof",
+                              "args": {"message": msg}, "result": {"signature": sig},
+                              "note": "proves Ada controls the owner address — controller verifies, never signs"}))
             checks = _predicate_checks(self.reader.get(eid), self.reader.chain_time(), ADA)
             emit(_predicate(checks))
             info = self.controller.activate(eid, service, challenge.nonce, sig)
@@ -217,7 +237,12 @@ class Console:
             tx = self.bell.revoke(eid)
             block = self.bell._w3.eth.get_block("latest")
             emit(_chain_tx("revoke", tx, block["number"], f"Revoked(#{eid}) — flag flips on-chain",
-                           break_signal=True))
+                           break_signal=True,
+                           expand={"method": "A2ASettlement.revoke(uint256)", "from": "Bell (issuer)",
+                                   "tx_hash": tx, "block": block["number"],
+                                   "effects": [f"entitlement[{eid}].revoked = true",
+                                               "Ada still OWNS the NFT — only the right is voided"]}))
+            emit(_ticket(self._ticket_view(eid)))  # NFT panel: revoked flag flips to true
             emit(_stage("controller", "Watcher tears the session down"))
             self.controller.handle_revoked(eid)  # the ChainReader watcher does this live too
             emit(_ev("teardown", "controller", f"Session {sid} torn down",
@@ -228,6 +253,22 @@ class Console:
             emit(_done(True, f"Ticket #{eid} revoked. Throughput returned to unshaped."))
         except Exception as err:  # noqa: BLE001
             emit(_ev("error", "chain", "Revoke failed", str(err)[:200]))
+
+    def _ticket_view(self, eid: int) -> dict:
+        """The NFT as the panel shows it — owner from ownerOf, everything else decoded from
+        the on-chain tokenURI (metadata lives entirely on-chain, no external server)."""
+        import base64
+
+        owner = self.reader.owner_of(eid)
+        meta = json.loads(base64.b64decode(self.reader.token_uri(eid).split(",", 1)[1]))
+        return {
+            "id": eid, "name": meta["name"], "symbol": "A2AENT",
+            "owner": owner, "owner_label": "Ada",
+            "issuer": meta["issuer"], "issuer_label": "Bell",
+            "service": "bandwidth" if meta["serviceType"] == 0 else "telemetry",
+            "window": f"{_hm(meta['startTime'])}–{_hm(meta['endTime'])}",
+            "resource_id": meta["resourceId"], "revoked": meta["revoked"], "metadata": meta,
+        }
 
     # --- network / device helpers -------------------------------------------
 
@@ -381,14 +422,48 @@ def _stage(domain: str, label: str) -> dict:
     return {"kind": "stage", "domain": domain, "title": label, "t": _now_ms()}
 
 
-def _a2a(frm: str, to: str, skill: str, summary: str) -> dict:
+def _a2a(frm: str, to: str, skill: str, summary: str, expand: dict | None = None) -> dict:
     return {"kind": "a2a", "domain": "agent", "frm": frm, "to": to, "skill": skill,
-            "title": f"{frm} → {to}", "detail": f"{skill} · {summary}", "t": _now_ms()}
+            "title": f"{frm} → {to}", "detail": f"{skill} · {summary}", "expand": expand,
+            "t": _now_ms()}
 
 
-def _mcp(agent: str, server: str, tool: str, args: str, result: str) -> dict:
+def _mcp(agent: str, server: str, tool: str, args: str, result: str,
+         expand: dict | None = None) -> dict:
     return {"kind": "mcp", "domain": "agent", "agent": agent, "server": server, "tool": tool,
-            "title": f"{agent} · {server}.{tool}", "detail": f"{args} → {result}", "t": _now_ms()}
+            "title": f"{agent} · {server}.{tool}", "detail": f"{args} → {result}",
+            "expand": expand, "t": _now_ms()}
+
+
+def _clip(d: dict, keep: int = 10) -> dict:
+    """Trim long hex blobs so an expanded payload stays readable in the UI."""
+    out = {}
+    for k, v in list(d.items())[:keep]:
+        if isinstance(v, str) and v.startswith("0x") and len(v) > 26:
+            v = v[:22] + "…"
+        out[k] = v
+    return out
+
+
+def _a2a_out(service: str, need) -> dict:
+    """The real A2A message body Ada would POST to Bell's agent-card endpoint."""
+    from agents.a2a_adapter import encode_need
+
+    port = 9101 if service == "bandwidth" else 9102
+    return {"endpoint": f"http://localhost:{port}/.well-known/agent-card.json",
+            "skill": f"quote_{service}", "transport": "A2A message → DataPart (JSON)",
+            "body": json.loads(encode_need(need))}
+
+
+def _a2a_reply(offer) -> dict:
+    from agents.a2a_adapter import encode_offer_or_decline
+
+    body = json.loads(encode_offer_or_decline(offer))
+    if isinstance(body.get("offer"), dict):
+        body["offer"] = _clip(body["offer"])
+    body = _clip(body)
+    return {"endpoint": "reply on the same A2A task", "transport": "A2A message → DataPart (JSON)",
+            "body": body}
 
 
 def _decision(agent: str, accept: bool, reason: str) -> dict:
@@ -397,10 +472,17 @@ def _decision(agent: str, accept: bool, reason: str) -> dict:
             "t": _now_ms()}
 
 
-def _chain_tx(method: str, tx_hash: str, block: int, summary: str, break_signal: bool = False) -> dict:
+def _chain_tx(method: str, tx_hash: str, block: int, summary: str, break_signal: bool = False,
+              expand: dict | None = None) -> dict:
     return {"kind": "chain_tx", "domain": "chain", "method": method, "tx_hash": tx_hash,
             "block": block, "break_signal": break_signal, "title": f"tx · {method}",
-            "detail": f"{summary}  ·  {tx_hash[:18]}…  block {block}", "t": _now_ms()}
+            "detail": f"{summary}  ·  {tx_hash[:18]}…  block {block}", "expand": expand,
+            "t": _now_ms()}
+
+
+def _ticket(view: dict) -> dict:
+    return {"kind": "ticket", "domain": "chain", "state": view,
+            "title": f"ticket #{view['id']}", "detail": view["name"], "t": _now_ms()}
 
 
 def _chain_read(what: str, value: str) -> dict:

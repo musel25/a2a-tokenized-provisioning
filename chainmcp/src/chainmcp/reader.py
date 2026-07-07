@@ -52,6 +52,7 @@ class ChainReader:
 
     # The read + watch methods ARE ChainClient's — same code, borrowed, no key in sight.
     owner_of = ChainClient.owner_of
+    token_uri = ChainClient.token_uri
     get = ChainClient.get
     chain_time = ChainClient.chain_time
     watch_revoked = ChainClient.watch_revoked

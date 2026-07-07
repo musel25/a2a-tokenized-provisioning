@@ -155,6 +155,37 @@
   .chk{display:inline-block; margin-right:6px; font-size:10px}
   .chk.ok{color:var(--network)} .chk.no{color:var(--revoke)}
   .hash{color:var(--chain)}
+  /* clickable event rows → expand to the real payload */
+  .ev.has-expand{cursor:pointer}
+  .ev.has-expand .body .t::after{content:"▸"; color:var(--faint); font-size:9px; margin-left:7px; transition:transform .15s}
+  .ev.open .body .t::after{transform:rotate(90deg); display:inline-block}
+  .ev-detail{grid-column:1 / -1; margin-top:8px; border-top:1px dashed var(--line); padding-top:8px; display:none}
+  .ev.open .ev-detail{display:block}
+  .ev-detail .er{display:flex; gap:8px; font-size:10.5px; margin:3px 0}
+  .ev-detail .er .ek{flex:0 0 82px; color:var(--faint); text-transform:uppercase; letter-spacing:.05em; font-size:9px; padding-top:2px}
+  .ev-detail .er .ev2{color:var(--text); word-break:break-all}
+  .ev-detail pre{margin:2px 0 0; padding:8px 10px; background:var(--panel-2); border:1px solid var(--line);
+    border-radius:7px; font-size:10px; line-height:1.5; color:var(--muted); overflow-x:auto; white-space:pre-wrap; word-break:break-word}
+  .ev-detail .endpoint{color:var(--controller)}
+
+  /* the NFT / ticket card */
+  .nft-empty{color:var(--faint); font-size:11px; line-height:1.5; padding:6px 0}
+  .nft{border:1px solid var(--chain); border-radius:12px; overflow:hidden;
+    background:linear-gradient(160deg, rgba(224,169,59,.09), rgba(224,169,59,.02))}
+  .nft.revoked{border-color:var(--revoke); background:linear-gradient(160deg, rgba(240,85,107,.1), transparent)}
+  .nft .top{display:flex; align-items:center; justify-content:space-between; padding:9px 11px; border-bottom:1px solid var(--line)}
+  .nft .sym{font-size:9px; letter-spacing:.12em; color:var(--chain); border:1px solid var(--chain); border-radius:5px; padding:2px 6px}
+  .nft.revoked .sym{color:var(--revoke); border-color:var(--revoke)}
+  .nft .id{font-family:var(--display); font-weight:600; font-size:15px}
+  .nft .stamp{font-size:9px; letter-spacing:.14em; color:var(--revoke); border:1px solid var(--revoke); border-radius:5px; padding:2px 6px}
+  .nft .stamp.live{color:var(--network); border-color:var(--network)}
+  .nft .rows{padding:8px 11px}
+  .nft .r{display:flex; justify-content:space-between; gap:10px; font-size:10.5px; padding:3px 0}
+  .nft .r .k{color:var(--muted)} .nft .r .v{color:var(--text); text-align:right; word-break:break-all}
+  .nft details{border-top:1px solid var(--line); padding:8px 11px}
+  .nft summary{font-size:9.5px; letter-spacing:.06em; color:var(--faint); cursor:pointer; text-transform:uppercase}
+  .nft summary:hover{color:var(--chain)}
+  .nft pre{margin:8px 0 0; font-size:9.5px; line-height:1.5; color:var(--muted); white-space:pre-wrap; word-break:break-word}
 
   /* device inspector */
   .insp .kv{display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px dashed var(--line);
@@ -215,16 +246,16 @@
 
     <div class="card sidecol">
       <div>
-        <h2>Bell's kill switch</h2>
-        <div class="state" style="color:var(--muted); font-size:11.5px; min-height:44px" id="revoke-state">
-          No active ticket yet. Buy a service, then Bell can revoke it mid-window.
-        </div>
-        <button class="btn" id="revoke" disabled>Revoke ticket ✕</button>
+        <h2>Your ticket — the NFT</h2>
+        <div id="nft"><div class="nft-empty">No ticket yet. Ask Ada to buy a service; the ERC-721 she receives appears here.</div></div>
       </div>
       <div style="margin-top:14px">
-        <h2>Session</h2>
-        <div class="state" id="sess" style="color:var(--muted); font-size:11.5px; min-height:20px">idle</div>
-        <button class="btn ghost" id="reset" style="margin-top:10px">Reset stack</button>
+        <h2>Bell's kill switch</h2>
+        <div class="state" style="color:var(--muted); font-size:11px; min-height:34px" id="revoke-state">
+          Buy a service, then Bell (the issuer) can revoke the NFT above.
+        </div>
+        <button class="btn" id="revoke" disabled>Revoke ticket ✕</button>
+        <button class="btn ghost" id="reset" style="margin-top:8px">Reset stack</button>
       </div>
     </div>
   </section>
@@ -315,6 +346,7 @@ function resetRelay(){
     $('#stt-'+d).innerHTML='<span class="sm">idle</span>'; });
   conns.forEach(c=>{ const el=$('#'+c); el.className='conn'; });
   $('#stream').innerHTML=''; $('#insp-body').innerHTML='<div class="idle">No enforcement yet.</div>';
+  $('#nft').innerHTML='<div class="nft-empty">No ticket yet. Ask Ada to buy a service; the ERC-721 she receives appears here.</div>';
 }
 function stage(domain){
   const i = order.indexOf(domain);
@@ -346,7 +378,49 @@ function addEv(e){
   if(e.kind==='chain_tx' && e.tx_hash) detail = detail.replace(e.tx_hash.slice(0,18), `<span class="hash">${e.tx_hash.slice(0,18)}</span>`);
   if(e.kind==='predicate') detail = e.checks.map(c=>`<span class="chk ${c.ok?'ok':'no'}">${c.ok?'✓':'✗'}</span>${c.name}`).join(' ');
   div.innerHTML = `<div class="tag">${tag}</div><div class="body"><div class="t">${e.title||''}</div><div class="d">${detail}</div></div>`;
+  if(e.expand){
+    div.classList.add('has-expand');
+    const det = document.createElement('div'); det.className='ev-detail'; det.innerHTML = renderExpand(e.expand);
+    div.querySelector('.body').appendChild(det);
+    div.addEventListener('click', () => div.classList.toggle('open'));
+  }
   s.appendChild(div); s.scrollTop = s.scrollHeight;
+}
+function esc(s){ return String(s).replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+function renderExpand(x){
+  let html = '';
+  for(const [k,v] of Object.entries(x)){
+    const cls = k==='endpoint' ? 'ev2 endpoint' : 'ev2';
+    if(v && typeof v === 'object'){
+      html += `<div class="er"><span class="ek">${k}</span><span class="${cls}"><pre>${esc(JSON.stringify(v,null,1))}</pre></span></div>`;
+    } else {
+      html += `<div class="er"><span class="ek">${k}</span><span class="${cls}">${esc(v)}</span></div>`;
+    }
+  }
+  return html;
+}
+
+// the NFT / ticket card
+function short(a){ return a && a.length>14 ? a.slice(0,8)+'…'+a.slice(-4) : a; }
+function renderTicket(v){
+  const box = document.getElementById('nft');
+  const rev = v.revoked;
+  box.innerHTML = `
+    <div class="nft ${rev?'revoked':''}">
+      <div class="top">
+        <span class="sym">${v.symbol}</span>
+        <span class="id">#${v.id}</span>
+        <span class="stamp ${rev?'':'live'}">${rev?'revoked':'live'}</span>
+      </div>
+      <div class="rows">
+        <div class="r"><span class="k">owner</span><span class="v">${v.owner_label} · ${short(v.owner)}</span></div>
+        <div class="r"><span class="k">issuer</span><span class="v">${v.issuer_label} · ${short(v.issuer)}</span></div>
+        <div class="r"><span class="k">service</span><span class="v">${v.service}</span></div>
+        <div class="r"><span class="k">window</span><span class="v">${v.window}</span></div>
+        <div class="r"><span class="k">revoked</span><span class="v" style="color:${rev?'var(--revoke)':'var(--network)'}">${rev}</span></div>
+      </div>
+      <details><summary>on-chain metadata · tokenURI</summary><pre>${esc(JSON.stringify(v.metadata,null,1))}</pre></details>
+    </div>`;
 }
 
 // device inspector
@@ -392,6 +466,7 @@ function dispatch(e){
 
   switch(e.kind){
     case 'chat': addChat(e.who, e.detail); break;
+    case 'ticket': renderTicket(e.state); break;
     case 'stage':
       if(e.title && e.title.toLowerCase().includes('pulls')) cutRelay(); else stage(e.domain);
       running = true; $('#send').disabled = true; break;
@@ -405,7 +480,7 @@ function dispatch(e){
       setStation('controller', e.title, ''); break;
     case 'session': setStation('controller', 'authorized', e.detail);
       $('#revoke').disabled=false; $('#revoke-state').innerHTML='Ticket live. Bell can pull it now — <b style="color:var(--revoke)">the enforcement is downstream of the chain.</b>';
-      $('#sess').innerHTML = e.detail; break;
+      break;
     case 'teardown': setStation('controller', 'torn down', e.detail);
       $('#revoke').disabled=true; break;
     case 'device': {
