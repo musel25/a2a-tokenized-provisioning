@@ -68,11 +68,22 @@ def _iperf_udp_received_mbps() -> float:
 
 
 def run() -> dict:
+    # Refuse to run (and to clobber any existing demo events) unless the lab is up —
+    # this demo drives a real router. For a stack-free dashboard, use
+    # `python -m e2e.dashboard.demo_run` instead.
+    lab = lab_ipv4()
+    if lab is None:
+        raise SystemExit(
+            "e2e.demo needs the SR Linux lab up:\n"
+            "  containerlab deploy -t netlab/topology.clab.yml\n"
+            "(for a stack-free dashboard, run: uv run python -m e2e.dashboard.demo_run)"
+        )
+
     log = RunLog(Path(__file__).resolve().parents[3] / "e2e" / "runs" / "demo" / "events.jsonl")
     log.path.unlink(missing_ok=True)
     log = RunLog(log.path)
     anvil = launch_anvil(timestamp=STORY_TIME)
-    provisioner = GnmiProvisioner({"srl1": GnmiTarget(host=lab_ipv4(), tls_name="srl1")})
+    provisioner = GnmiProvisioner({"srl1": GnmiTarget(host=lab, tls_name="srl1")})
     bell = ChainClient(anvil.rpc_url, ANVIL_KEYS["bell"], deployment=anvil.deployment)
     ada = ChainClient(anvil.rpc_url, ANVIL_KEYS["ada"], deployment=anvil.deployment)
     measured = {}
