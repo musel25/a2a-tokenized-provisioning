@@ -18,12 +18,14 @@ source = { editable = "e2e" }
 dependencies = [
     { name = "a2a-interfaces" },
     { name = "chainmcp" },
+    { name = "netctl" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "a2a-interfaces", editable = "interfaces" },
     { name = "chainmcp", editable = "chainmcp" },
+    { name = "netctl", editable = "netctl" },
 ]
 
 [[package]]

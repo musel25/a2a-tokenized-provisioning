@@ -6,6 +6,7 @@ requires-python = ">=3.12"
 dependencies = [
     "a2a-interfaces",
     "chainmcp",
+    "netctl",
 ]
 
 [build-system]
@@ -18,3 +19,4 @@ packages = ["src/e2e"]
 [tool.uv.sources]
 a2a-interfaces = { workspace = true }
 chainmcp = { workspace = true }
+netctl = { workspace = true }
