@@ -206,3 +206,15 @@ def test_underfunded_buyer_is_rejected(world):
     with pytest.raises(InsufficientFunds):
         world.fulfill(signed, buyer=MALLORY)
     _assert_fulfill_left_no_trace(world, signed, ada_before, bell_before)
+
+
+def test_proof_template_agrees_across_packages():
+    """Cross-package parity: chainmcp builds the activation-proof string the controller
+    parses. Neither may import the other (import direction!), so both answer to
+    docs/03 §3.2 — and this test, the only place both sides meet."""
+    from chainmcp import activation_proof_message
+    from controller.auth import proof_message
+
+    assert activation_proof_message("bw-ctrl-1", "0xabcd", 7, 1757945100) == proof_message(
+        "bw-ctrl-1", "0xabcd", 7, 1757945100
+    )

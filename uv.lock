@@ -523,10 +523,14 @@ version = "0.0.0"
 source = { editable = "controller" }
 dependencies = [
     { name = "a2a-interfaces" },
+    { name = "eth-account" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "a2a-interfaces", editable = "interfaces" }]
+requires-dist = [
+    { name = "a2a-interfaces", editable = "interfaces" },
+    { name = "eth-account", specifier = ">=0.13" },
+]
 
 [[package]]
 name = "cryptography"
