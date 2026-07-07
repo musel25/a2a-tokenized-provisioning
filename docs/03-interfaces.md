@@ -394,6 +394,29 @@ The consumer's accept/reject decision is structured output, validated and retrie
 
 ---
 
+## 8. Dashboard events (producer: every component · consumer: the dashboard)
+
+Components append these as JSONL to `e2e/runs/<ts>/events.jsonl`; the Streamlit dashboard
+tails the file (ADR-003). Additive shape — carries its own `"v": 0` like every payload;
+adding it changes no existing consumer.
+
+```json
+{
+  "v": 0,
+  "ts": 1757952000,
+  "step": "revoke",
+  "trust_domain": "chain",
+  "narration": "Bell revokes #7 — throughput dies mid-window",
+  "detail": { "entitlement_id": 7 }
+}
+```
+
+`ts` is **chain time** (ADR-004). `trust_domain` ∈ `chain | controller | network | agent`
+— which column the event lands in (who is trusted to have done it). `narration` is the
+epilogue sentence, shown literally on the stepper.
+
+---
+
 ## 7. Open flip-points carried in v0 (defaults stated)
 
 | Question | v0 default | Alternative |
