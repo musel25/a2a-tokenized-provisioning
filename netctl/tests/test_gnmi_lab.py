@@ -82,3 +82,45 @@ def test_one_call_reproduces_the_m22_plateau():
         f"teardown should let the full 100M offer through again (shaped {shaped:.1f}, "
         f"after {unshaped:.1f})"
     )
+
+
+def test_one_call_streams_samples_to_the_collector():
+    """The M3.3 acceptance test: apply_telemetry → TelemetrySample JSON lines arrive
+    at the consumer's endpoint on the sample interval; teardown stops them."""
+    import time
+
+    from a2a_interfaces import TelemetrySample
+    from a2a_interfaces.models import ResolvedNode
+    from netctl.testing import DummyCollector
+
+    provisioner = GnmiProvisioner({"srl1": GnmiTarget(host=lab_ipv4(), tls_name="srl1")})
+    collector = DummyCollector()
+    session = "lab-telemetry"
+    try:
+        result = provisioner.apply_telemetry(
+            session,
+            ResolvedNode(device="srl1"),
+            ["/interface[name=ethernet-1/1]/statistics"],
+            collector.endpoint,
+            sample_interval_s=1,  # fast for the test; the fixture product is 10s
+        )
+        assert result.ok, result.detail
+
+        deadline = time.monotonic() + 10
+        while len(collector.lines) < 2 and time.monotonic() < deadline:
+            time.sleep(0.2)
+        assert len(collector.lines) >= 2, "expected at least two samples in 10s"
+
+        sample = TelemetrySample.model_validate_json(collector.lines[0])
+        assert sample.session_id == session
+        # the router answers the container subscription with one value: the whole
+        # statistics dict — the counters live one level down
+        assert "in-octets" in collector.lines[0], sample.values
+    finally:
+        assert provisioner.teardown(session).ok
+        provisioner.close()
+        collector.stop()
+
+    settled = len(collector.lines)
+    time.sleep(2.5)
+    assert len(collector.lines) == settled, "teardown must stop the stream"

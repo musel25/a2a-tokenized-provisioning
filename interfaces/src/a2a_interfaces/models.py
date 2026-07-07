@@ -211,6 +211,21 @@ class EntitlementView(_Frozen):
 # --- Provisioning port shapes (§5) -----------------------------------------
 
 
+class TelemetrySample(_Frozen):
+    """One streamed sensor sample, forwarder → consumer collector (§5.1, ADR-007).
+
+    Producer: netctl's telemetry forwarder. Consumer: whatever listens at the
+    entitlement's `collector_endpoint` (the e2e dummy collector, later the dashboard).
+    One JSON line per sample on the wire.
+    """
+
+    v: Literal[0] = 0
+    session_id: str
+    path: str  # the subscribed sensor path this sample answers
+    timestamp_ns: int  # the router's notification timestamp (unix ns)
+    values: dict[str, Any]  # leaf path → value, as the router reported them
+
+
 class ResolvedPath(_Frozen):
     """Concrete device + interfaces the controller hands to netctl (§5)."""
 

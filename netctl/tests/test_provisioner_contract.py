@@ -55,13 +55,25 @@ def test_teardown_of_unknown_session_succeeds(provisioner):
     assert provisioner.teardown("never-existed").ok
 
 
-def test_apply_telemetry_not_yet(provisioner):
-    # Pinned so BOTH implementations grow telemetry in the same milestone (M3.3),
-    # not one before the other.
-    import pytest
+def test_apply_telemetry_then_teardown_roundtrip(provisioner):
+    from a2a_interfaces.fixtures import TELEMETRY_NEED
+    from a2a_interfaces.models import ResolvedNode
+    from netctl.testing import DummyCollector
 
-    with pytest.raises(NotImplementedError):
-        provisioner.apply_telemetry(SESSION, None, [], "", 10)
+    collector = DummyCollector()  # the gnmi leg really dials this endpoint
+    try:
+        result = provisioner.apply_telemetry(
+            SESSION,
+            ResolvedNode(device="srl1"),
+            TELEMETRY_NEED.sensor_paths,
+            collector.endpoint,
+            TELEMETRY_NEED.sample_interval_s,
+        )
+        assert result.ok, result.detail
+        assert provisioner.teardown(SESSION).ok
+        assert provisioner.teardown(SESSION).ok  # telemetry teardown idempotent too
+    finally:
+        collector.stop()
 
 
 def test_unknown_device_is_a_loud_error():
