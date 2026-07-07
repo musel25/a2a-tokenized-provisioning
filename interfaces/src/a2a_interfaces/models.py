@@ -291,11 +291,12 @@ class EntitlementView(_Frozen):
 
 
 class TelemetrySample(_Frozen):
-    """One streamed sensor sample, forwarder → consumer collector (§5.1, ADR-007).
+    """One exported sensor sample — the wire shape a collector parses (§5.1, ADR-007).
 
-    Producer: netctl's telemetry forwarder. Consumer: whatever listens at the
-    entitlement's `collector_endpoint` (the e2e dummy collector, later the dashboard).
-    One JSON line per sample on the wire.
+    ADR-007 was revised: the telemetry ticket is now the RIGHT to configure a telemetry
+    export destination on the device (netctl writes a gNMI dial-out config), not a
+    provider-side forwarder. This remains the JSON-line shape a `collector_endpoint`
+    would receive once export is wired end to end. One JSON line per sample on the wire.
     """
 
     v: Literal[0] = 0

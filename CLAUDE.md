@@ -26,7 +26,7 @@ SR Linux routers via gNMI.
    wake-ups; every action re-checks `chain_time()` before executing.
 6. **`netctl` is topology-agnostic.** It receives concrete device/interface names
    (`ResolvedPath`/`ResolvedNode`) and speaks gNMI. The `resourceId → topology` map lives
-   only in `controller/resource_map.yaml` (ADR-005).
+   only in `controller/src/controller/resource_map.yaml` (ADR-005).
 7. **Mocks implement the same Protocol as real adapters** and pass the same shared
    contract-test suite. A mock with different behavior at the port is a bug.
 8. **Teardown is idempotent** everywhere. Calling it twice is a success, not an error.

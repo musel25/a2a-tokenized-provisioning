@@ -2,8 +2,20 @@
 
 ### Project Design & Execution Plan
 
+> **Status: the original formal plan (historical).** This captures the design as conceived
+> up front and is preserved as the record of intent. Where the build diverged, the *current*
+> truth lives elsewhere — read those first for anything operational:
+> - **Telemetry** is now the *right to configure export on the device* (a gNMI dial-out
+>   config), not a provider-side forwarder — see `docs/adr/007-telemetry-delivery.md`
+>   (revision) and `docs/03-interfaces.md` §5.1.
+> - **The LLM** runs on a deployed Modal vLLM endpoint (`llmserve/`), not just local serve —
+>   `docs/adr/001-llm-serving.md` (amendment).
+> - **The demo surface** is the interactive operator console (`just console`), with the
+>   Streamlit view kept as a headless tail — `docs/08-demo-dashboard.md`.
+> - **Feasibility numbers** live in `docs/09-evaluation.md`; the milestone map + status in
+>   `docs/01-implementation-plan.md`. The ADRs (`docs/adr/`) are the authoritative decisions.
 
-**Stack:** vLLM · LangGraph · MCP · A2A protocol · Foundry/Anvil · Containerlab + Nokia SR Linux · pygnmi/gNMI
+**Stack:** LangGraph · MCP · A2A protocol · vLLM-on-Modal · Foundry/Anvil · Containerlab + Nokia SR Linux · pygnmi/gNMI
 
 ## 1. Overview, thesis statement, scope
 

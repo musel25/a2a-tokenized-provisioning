@@ -34,11 +34,7 @@ def telemetry_destination(name: str) -> str:
     return f"/system/grpc-tunnel/destination[name={name}]"
 
 
-# --- interface state / telemetry (docs/07 §7) --------------------------------
-
-
-def interface_statistics(interface: str) -> str:
-    return f"/interface[name={interface}]/statistics"
+# --- interface state (docs/07 §7) --------------------------------------------
 
 
 def interface_oper_state(interface: str) -> str:
