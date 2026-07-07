@@ -547,16 +547,20 @@ version = "0.0.0"
 source = { editable = "controller" }
 dependencies = [
     { name = "a2a-interfaces" },
+    { name = "chainmcp" },
     { name = "eth-account" },
     { name = "fastapi" },
+    { name = "netctl" },
     { name = "pyyaml" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "a2a-interfaces", editable = "interfaces" },
+    { name = "chainmcp", editable = "chainmcp" },
     { name = "eth-account", specifier = ">=0.13" },
     { name = "fastapi", specifier = ">=0.115" },
+    { name = "netctl", editable = "netctl" },
     { name = "pyyaml", specifier = ">=6" },
 ]
 

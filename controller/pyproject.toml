@@ -5,6 +5,8 @@ description = "The bouncer + translator: deterministic gatekeeper between chain 
 requires-python = ">=3.12"
 dependencies = [
     "a2a-interfaces",
+    "chainmcp",
+    "netctl",
     "eth-account>=0.13",
     "pyyaml>=6",
     "fastapi>=0.115",
@@ -19,3 +21,5 @@ packages = ["src/controller"]
 
 [tool.uv.sources]
 a2a-interfaces = { workspace = true }
+chainmcp = { workspace = true }
+netctl = { workspace = true }
