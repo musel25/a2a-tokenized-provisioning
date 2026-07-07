@@ -86,6 +86,8 @@ class Console:
             "chain_time": self.reader.chain_time() if self.reader else None,
             "llm": {"status": self.llm_status, "model": self.llm_model,
                     "muted": self.llm_muted, "live": self.llm_live()},
+            "rpc_url": self.anvil.rpc_url if self.anvil else None,
+            "explorer": _explorer_up(),  # Otterscan on :5100 (just explorer)
         }
 
     def warm_llm(self) -> None:
@@ -112,7 +114,10 @@ class Console:
             if self.anvil is not None:
                 return
             emit(_ev("boot", "chain", "Starting local chain", "anvil — story time 13:32"))
-            self.anvil = launch_anvil(timestamp=STORY_TIME)
+            # Prefer :8545 — the address Otterscan (`just explorer`) is configured to read,
+            # so tx links in the stream resolve. Fall back to an ephemeral port if taken.
+            self.anvil = launch_anvil(timestamp=STORY_TIME,
+                                      port=8545 if _port_free(8545) else None)
             self.lab_ip = lab_ipv4()
             self.bell = _client("bell", self.anvil)
             self.ada = _client("ada", self.anvil)
@@ -601,6 +606,23 @@ def _done(ok: bool, summary: str) -> dict:
 
 def _now_ms() -> int:
     return int(time.monotonic() * 1000)
+
+
+def _port_free(port: int) -> bool:
+    import socket
+
+    with socket.socket() as sock:
+        return sock.connect_ex(("127.0.0.1", port)) != 0
+
+
+def _explorer_up() -> bool:
+    """Is Otterscan serving on :5100? A cheap TCP check — the explorer is optional and
+    browser-side (it reads Anvil's ots_ API directly), so this only gates the links."""
+    import socket
+
+    with socket.socket() as sock:
+        sock.settimeout(0.15)
+        return sock.connect_ex(("127.0.0.1", 5100)) == 0
 
 
 def _client(name: str, anvil) -> ChainClient:

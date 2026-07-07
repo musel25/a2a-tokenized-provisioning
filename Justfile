@@ -14,6 +14,19 @@ up:
 down:
     uv run python -m e2e.bringup down
 
+# block explorer over the console's chain → http://localhost:5100
+# Otterscan is browser-side: the page you open reads Anvil's ots_ API at 127.0.0.1:8545
+# directly (the console pins its Anvil there when free). Start before or after the
+# console — the tx hashes in the event stream become links once both are up.
+explorer:
+    docker rm -f a2a-otterscan 2>/dev/null || true
+    docker run -d --name a2a-otterscan -p 5100:80 \
+      -e ERIGON_URL=http://127.0.0.1:8545 otterscan/otterscan:latest
+    @echo "explorer → http://localhost:5100"
+
+explorer-down:
+    docker rm -f a2a-otterscan
+
 # the interactive operator console → http://127.0.0.1:8099
 # Click "Ada, get me this" to drive the real pipeline (agents → chain → controller →
 # router) and watch it in the trust relay. Bring the SR Linux lab up first for live

@@ -43,12 +43,16 @@ forge build --root contracts                       # contract artifacts (needs F
 # each session
 containerlab deploy -t netlab/topology.clab.yml    # the network (SR Linux srl1 + hosts)
 just console                                       # → http://127.0.0.1:8099
+just explorer                                      # optional: block explorer → http://localhost:5100
 ```
 
 Open the console, tell Ada what you want ("get me 50 Mbps under 12 TOK"), and watch the
 request cross agents → chain → controller → router, live. `Revoke` kills it mid-window.
-Teardown: `containerlab destroy -t netlab/topology.clab.yml` (the console's chain is
-per-session; nothing else persists).
+With the explorer up, every tx hash in the event stream links into Otterscan — inspect
+the fulfill/revoke transactions, blocks, and the ERC-721 in a real block-explorer UI
+(Anvil serves Otterscan's API natively; nothing is mocked). Teardown:
+`containerlab destroy -t netlab/topology.clab.yml` + `just explorer-down` (the console's
+chain is per-session; nothing else persists).
 
 **Choosing the judgment mode.** With no `.env`, the two judgment slots run deterministic
 stand-ins (instant, offline). To make them *real model judgments*, deploy the LLM once

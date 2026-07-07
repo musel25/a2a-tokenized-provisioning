@@ -17,7 +17,13 @@ router — and when the ticket is revoked on-chain, the bandwidth dies mid-strea
 ```sh
 containerlab deploy -t netlab/topology.clab.yml   # the SR Linux lab (~1 min) — for live enforcement
 just console                                       # → http://127.0.0.1:8099
+just explorer                                      # optional: Otterscan → http://localhost:5100
 ```
+
+With the explorer up, the console pins its Anvil to :8545, an `explorer ↗` pill appears,
+and every tx hash in the event stream becomes a link — the jury can open the fulfill or
+revoke transaction in a real block-explorer UI (Anvil implements Otterscan's `ots_` API;
+the explorer reads the same chain the demo writes).
 
 **Chat to Ada's agent** — type a request ("get me 50 Mbps under 12 TOK", or "buy the right
 to configure telemetry export on srl1"). The agent reads the intent, picks the product,
