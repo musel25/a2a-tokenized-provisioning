@@ -1,11 +1,12 @@
-"""Worlds: one lifecycle-test surface, two realities (SKELETON_PROFILE).
+"""Worlds: one lifecycle-test surface, three realities (SKELETON_PROFILE).
 
 The lifecycle tests are the play's script; a World is the stage crew. `mock` wires the
 M0.3 cardboard props; `chain` puts a live Anvil + the real contracts + ChainClients
-under the SAME script — that is skeleton v1: the 10 TOK and ticket #7 become real
-on-chain state while the play's lines stay identical.
+under the SAME script (skeleton v1: the 10 TOK and ticket #7 become real on-chain
+state); `chain+net` adds the real router (skeleton v2: the 50 Mbps becomes a real
+policer on srl1). The play's lines never change — that is the whole point.
 
-What a world must provide (duck-typed; both classes below):
+What a world must provide (duck-typed; all classes below):
   reader           EntitlementReader (what the controller sees)
   net              NetworkProvisioner (FakeNet until M3.4's chain+net)
   controller       StubController wired to (reader, net)
@@ -14,6 +15,7 @@ What a world must provide (duck-typed; both classes below):
                    chain you cannot retarget after signing (that's BadSignature)
   fulfill(signed, buyer)  buyer redeems; raises the fakes' exception classes
   balance_of(addr) / salt_consumed(signed) / advance_time(s) / revoke(eid)
+  provisioned(sid) / torn_down(sid)  network state, read from wherever it really lives
 
 Deliberate mapping at the fulfill edge: ChainRevert names → the skeleton's exception
 classes. The three shared names match one-for-one (that parity was built in M1.3);
@@ -31,6 +33,7 @@ from a2a_interfaces.fixtures import (
     BELL,
     CANONICAL_OFFER,
     PRICE_10_TOK,
+    QOS_CLASS,
     TERMS_DOC,
     TICKET_ID,
     WINDOW,
@@ -89,6 +92,17 @@ class MockWorld:
     def revoke(self, entitlement_id: int) -> None:
         self.chain.revoke(entitlement_id)
 
+    def provisioned(self, session_id: str) -> dict | None:
+        """What the network holds for this session, or None — the world-level view
+        that lets one script assert against a recording fake AND a real router."""
+        record = self.net.applied.get(session_id)
+        if record is None:
+            return None
+        return {"capacity_bps": record["capacity_bps"], "qos_class": record["qos_class"]}
+
+    def torn_down(self, session_id: str) -> bool:
+        return session_id in self.net.torn_down and session_id not in self.net.applied
+
     def close(self) -> None:
         pass
 
@@ -120,7 +134,7 @@ class ChainWorld:
         # unused, is against rule 2's spirit.
         self._anvil = anvil
         self.reader = self.carol
-        self.net = FakeNet()
+        self.net = self._make_net()
         self.controller = StubController(self.reader, self.net)
         # Registered AFTER the controller's watcher: when this fires, the controller's
         # callback for the same event has already run (same polling thread, in order).
@@ -170,9 +184,86 @@ class ChainWorld:
         # event fired; a beat for the state write to settle costs nothing.
         time.sleep(0.05)
 
+    def _make_net(self):
+        """FakeNet in skeleton v1; ChainNetWorld overrides with the real hands."""
+        return FakeNet()
+
+    def provisioned(self, session_id: str) -> dict | None:
+        record = self.net.applied.get(session_id)
+        if record is None:
+            return None
+        return {"capacity_bps": record["capacity_bps"], "qos_class": record["qos_class"]}
+
+    def torn_down(self, session_id: str) -> bool:
+        return session_id in self.net.torn_down and session_id not in self.net.applied
+
     def close(self) -> None:
         for client in (self.ada, self.bell, self.carol, self.mallory):
             client.close()
+
+
+class ChainNetWorld(ChainWorld):
+    """Skeleton v2: real chain AND real router — the same script now leaves a policer
+    on srl1 and removes it at t1 (or at revocation). Only `_make_net` and the two
+    network-inspection helpers differ from v1; the play's lines are untouched."""
+
+    def _make_net(self):
+        from netctl.connect import GnmiTarget
+        from netctl.provisioner import GnmiProvisioner
+        from netctl.testing import lab_ipv4
+
+        ip = lab_ipv4()
+        if ip is None:
+            raise RuntimeError(
+                "SKELETON_PROFILE=chain+net needs the live lab "
+                "(containerlab deploy -t netlab/topology.clab.yml)"
+            )
+        self.provisioner = GnmiProvisioner({"srl1": GnmiTarget(host=ip, tls_name="srl1")})
+        return self.provisioner
+
+    def provisioned(self, session_id: str) -> dict | None:
+        """Read the session's policer OFF THE ROUTER — the assertion is against
+        reality, not a recording."""
+        from netctl import paths
+        from netctl.provisioner import _denamespace
+
+        client = self.provisioner._client("srl1")
+        response = client.get(
+            path=[paths.policer_template(f"a2a-{session_id}")],
+            encoding="json_ietf",
+            datatype="config",
+        )
+        for update in response["notification"][0].get("update") or []:
+            policers = _denamespace(update["val"] or {}).get("policer", [])
+            if policers:
+                return {
+                    "capacity_bps": policers[0]["peak-rate-kbps"] * 1000,
+                    "qos_class": QOS_CLASS,  # single class in v0; not on the router
+                }
+        return None
+
+    def torn_down(self, session_id: str) -> bool:
+        return self.provisioned(session_id) is None
+
+    def close(self) -> None:
+        # Zombie-policer sweep (docs/01 M3.4 "watch for"): even a FAILED test must not
+        # leave config on the router, or every later run measures a lie.
+        from netctl import paths
+        from netctl.provisioner import _denamespace
+
+        try:
+            client = self.provisioner._client("srl1")
+            response = client.get(
+                path=[paths.QOS_POLICER_TEMPLATES], encoding="json_ietf", datatype="config"
+            )
+            for update in response["notification"][0].get("update") or []:
+                for template in _denamespace(update["val"] or {}).get("policer-template", []):
+                    name = template.get("name", "")
+                    if name.startswith("a2a-"):
+                        self.provisioner.teardown(name.removeprefix("a2a-"))
+        finally:
+            self.provisioner.close()
+            super().close()
 
 
 class _SigningProvider:

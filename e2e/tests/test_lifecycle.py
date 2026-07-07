@@ -94,8 +94,10 @@ def test_happy_path_lifecycle(world):
     sid = world.controller.activate(eid, requester=ADA, nonce=nonce)
     narrate("14:02  checklist passed; gNMI Set: police 50,000 kbps")
     assert world.controller.state(sid) == SessionState.ACTIVE
-    assert world.net.applied[sid]["capacity_bps"] == CAPACITY_50_MBPS
-    assert world.net.applied[sid]["qos_class"] == QOS_CLASS
+    provisioned = world.provisioned(sid)
+    assert provisioned is not None  # in chain+net this is read OFF the router
+    assert provisioned["capacity_bps"] == CAPACITY_50_MBPS
+    assert provisioned["qos_class"] == QOS_CLASS
 
     # 9. Teardown at chain time t1 (ADR-004: the controller re-checks chain_time).
     view = world.reader.get(eid)
@@ -103,8 +105,7 @@ def test_happy_path_lifecycle(world):
     world.controller.tick()
     narrate("16:00  chain time >= endTime -> torn down")
     assert world.controller.state(sid) == SessionState.TORN_DOWN
-    assert sid in world.net.torn_down
-    assert sid not in world.net.applied
+    assert world.torn_down(sid)
 
 
 def test_replayed_offer_is_rejected(world):
@@ -137,7 +138,7 @@ def test_revocation_tears_down_active_session(world):
     world.revoke(eid)
     narrate("15:10  Bell revokes #7 -> session torn down mid-window")
     assert world.controller.state(sid) == SessionState.TORN_DOWN
-    assert sid in world.net.torn_down
+    assert world.torn_down(sid)
 
 
 class _FailingNet(FakeNet):

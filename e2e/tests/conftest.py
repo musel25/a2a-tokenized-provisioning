@@ -2,6 +2,7 @@
 
   mock       (default) the M0.3 cardboard props — what CI runs forever
   chain      skeleton v1: live Anvil + real contracts + ChainClients
+  chain+net  skeleton v2: v1 PLUS the real router — a policer really lands on srl1
 
 `chain` needs anvil on PATH and forge-built artifacts; if you ask for it without
 them, that's an error, not a skip — a profile you requested silently degrading to
@@ -14,7 +15,7 @@ import os
 
 import pytest
 
-from e2e.skeleton.worlds import STORY_TIME, ChainWorld, MockWorld, seed_chain
+from e2e.skeleton.worlds import STORY_TIME, ChainNetWorld, ChainWorld, MockWorld, seed_chain
 
 PROFILE = os.environ.get("SKELETON_PROFILE", "mock")
 
@@ -43,15 +44,16 @@ def world(request):
     if PROFILE == "mock":
         yield MockWorld()
         return
-    if PROFILE != "chain":
-        raise RuntimeError(f"unknown SKELETON_PROFILE={PROFILE!r} (mock | chain)")
+    if PROFILE not in ("chain", "chain+net"):
+        raise RuntimeError(f"unknown SKELETON_PROFILE={PROFILE!r} (mock | chain | chain+net)")
 
     from web3 import Web3
 
     anvil = request.getfixturevalue("_anvil_session")
     w3 = Web3(Web3.HTTPProvider(anvil.rpc_url))
     snapshot = w3.provider.make_request("evm_snapshot", [])["result"]
-    chain_world = ChainWorld(anvil)
+    world_class = ChainNetWorld if PROFILE == "chain+net" else ChainWorld
+    chain_world = world_class(anvil)
     yield chain_world
-    chain_world.close()
+    chain_world.close()  # for chain+net this also sweeps zombie policers off srl1
     w3.provider.make_request("evm_revert", [snapshot])

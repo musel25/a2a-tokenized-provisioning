@@ -506,9 +506,11 @@ stateDiagram-v2
 Walking [test_happy_path_lifecycle](../e2e/tests/test_lifecycle.py#L70) by hand. Since
 M1.5 the wiring lives in the `world` fixture (`e2e/skeleton/worlds.py` + `tests/conftest.py`):
 `SKELETON_PROFILE=mock` builds the `MockWorld` traced below; `SKELETON_PROFILE=chain`
-builds a `ChainWorld` — live Anvil, real contracts, ChainClients — under the *identical
-script* (that swap is skeleton v1; the balance asserts became deltas so both realities
-satisfy them):
+builds a `ChainWorld` — live Anvil, real contracts, ChainClients (skeleton v1);
+`SKELETON_PROFILE=chain+net` (M3.4) additionally swaps FakeNet for the real
+`GnmiProvisioner`, so the same script leaves a policer on the real router (skeleton
+v2). The script is identical in all three; balance asserts are deltas and network
+asserts go through `world.provisioned()` so every reality can satisfy them:
 
 ```text
 MockWorld():
