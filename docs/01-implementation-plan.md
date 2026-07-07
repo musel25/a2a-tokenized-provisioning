@@ -101,6 +101,7 @@ The skeleton lifecycle test runs in CI forever, in `mock` profile. Profiles sele
 | M6.3 | Telemetry e2e (second serviceType) | 1 | second lifecycle green, core reused | 7 |
 | M6.4 | Dashboard v1 (wireframe + ADR-003) | 2 | a live run watchable end-to-end | epilogue |
 | M6.5 | Demo script + revocation showpiece + recording | 1 | cold replay twice in a row | 8 |
+| M7.1 *(post-plan)* | Evaluation: harness + campaign + docs/09 | 1 | 7 experiments on the real stack; adversarially audited; `e2e/runs/eval/` committed | docs/09 |
 
 ---
 

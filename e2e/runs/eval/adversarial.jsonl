@@ -1,0 +1,13 @@
+{"exp": "adversarial", "attack": "activate before window start", "rejected": true, "layer": "controller", "code": "E_NOT_STARTED", "expected_layer": "controller"}
+{"exp": "adversarial", "attack": "replay a consumed offer (same salt)", "rejected": true, "layer": "contract", "code": "OfferAlreadyUsed", "expected_layer": "contract"}
+{"exp": "adversarial", "attack": "forged provider signature", "rejected": true, "layer": "contract", "code": "BadSignature", "expected_layer": "contract"}
+{"exp": "adversarial", "attack": "fulfill a lapsed offer (valid_until past)", "rejected": true, "layer": "contract", "code": "OfferExpired", "expected_layer": "contract"}
+{"exp": "adversarial", "attack": "activation proof signed by a non-owner", "rejected": true, "layer": "controller", "code": "E_NOT_OWNER", "expected_layer": "controller"}
+{"exp": "adversarial", "attack": "garbage activation signature", "rejected": true, "layer": "controller", "code": "E_NOT_OWNER", "expected_layer": "controller"}
+{"exp": "adversarial", "attack": "replay a consumed challenge nonce", "rejected": true, "layer": "controller", "code": "E_NONCE_REUSED", "expected_layer": "controller"}
+{"exp": "adversarial", "attack": "activate the same ticket twice (double-booking)", "rejected": true, "layer": "controller", "code": "E_CONFLICT", "expected_layer": "controller"}
+{"exp": "adversarial", "attack": "second ticket on the same resource", "rejected": false, "layer": null, "code": null, "by_design": "capacity is guarded at the provider's CapacityLedger (quote time), not the controller; E_CONFLICT is per-ticket"}
+{"exp": "adversarial", "attack": "telemetry action on a bandwidth ticket (scope)", "rejected": true, "layer": "controller", "code": "E_SCOPE", "expected_layer": "controller"}
+{"exp": "adversarial", "attack": "activate a revoked ticket", "rejected": true, "layer": "controller", "code": "E_REVOKED", "expected_layer": "controller"}
+{"exp": "adversarial", "attack": "challenge for a nonexistent ticket", "rejected": true, "layer": "controller", "code": "E_UNKNOWN_ENTITLEMENT", "expected_layer": "controller"}
+{"exp": "adversarial", "attack": "activate after window end", "rejected": true, "layer": "controller", "code": "E_EXPIRED", "expected_layer": "controller"}

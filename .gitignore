@@ -23,7 +23,9 @@ __marimo__/
 # --- Environment / local runs ---
 .env
 .env.local
-e2e/runs/
+# the evaluation dataset under e2e/runs/eval/ IS evidence (docs/09) — keep it tracked
+e2e/runs/*
+!e2e/runs/eval/
 
 # --- Editor / OS cruft ---
 .DS_Store
