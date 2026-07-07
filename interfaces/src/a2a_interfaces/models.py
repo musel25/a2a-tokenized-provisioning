@@ -170,6 +170,55 @@ class SignedOffer(_Frozen):
     terms_doc: dict[str, Any]
 
 
+# --- Activation API payloads (§3.1) — consumer agent ↔ controller -----------
+# The §3.1 examples elide the "v" field for brevity; the §0 convention (every JSON
+# payload carries v) wins here, as a validated default.
+
+
+class ChallengeRequest(_Frozen):
+    v: Literal[0] = 0
+    entitlement_id: int
+
+
+class ChallengeResponse(_Frozen):
+    v: Literal[0] = 0
+    nonce: str
+    controller_id: str
+    expires_at: Uint64  # chain time
+
+
+class ActionPayload(_Frozen):
+    kind: Literal["bandwidth", "telemetry"]
+
+
+class ProofPayload(_Frozen):
+    nonce: str
+    signature: Signature
+
+
+class ActivateRequest(_Frozen):
+    v: Literal[0] = 0
+    entitlement_id: int
+    action: ActionPayload
+    proof: ProofPayload
+
+
+class SessionInfo(_Frozen):
+    """Returned by activate and GET /v0/sessions/{id} (§3.1/§3.3)."""
+
+    v: Literal[0] = 0
+    session_id: str
+    entitlement_id: int
+    state: SessionState
+    since: Uint64
+    expires_at: Uint64
+
+
+class TeardownRequest(_Frozen):
+    v: Literal[0] = 0
+    session_id: str
+
+
 # --- LLM decision (§6.3): the only judgment slot ---------------------------
 
 
