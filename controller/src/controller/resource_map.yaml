@@ -1,0 +1,15 @@
+# resourceId → topology (ADR-005): the ONLY file where opaque on-chain handles meet
+# device names. Grows entry by entry as the provider sells new resources; the ids and
+# their resolutions here are the canonical lab values (a2a_interfaces.fixtures).
+
+# ticket #7's path — Ada's 50 Mbps, hostA-side ingress through srl1
+"0x0000000000000000000000000000000000000000000000000000000000000007":
+  kind: path
+  device: srl1
+  ingress_if: ethernet-1/1
+  egress_if: ethernet-1/2
+
+# ticket #8's node — the telemetry product: srl1 narrating its own counters
+"0x0000000000000000000000000000000000000000000000000000000000000008":
+  kind: node
+  device: srl1

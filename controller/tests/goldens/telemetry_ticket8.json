@@ -1,0 +1,16 @@
+[
+  {
+    "method": "apply_telemetry",
+    "kwargs": {
+      "session_id": "ent8-a1",
+      "target": {
+        "device": "srl1"
+      },
+      "sensor_paths": [
+        "/interface[name=ethernet-1/1]/statistics"
+      ],
+      "collector_endpoint": "10.0.0.50:57000",
+      "sample_interval_s": 10
+    }
+  }
+]

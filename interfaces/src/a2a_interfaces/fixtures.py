@@ -16,9 +16,11 @@ from .models import (
     DecisionOutput,
     EntitlementView,
     Offer,
+    ResolvedNode,
     ResolvedPath,
     SignedOffer,
     TelemetryNeed,
+    TelemetryParams,
     TimeWindow,
 )
 
@@ -101,5 +103,26 @@ CANONICAL_ENTITLEMENT_VIEW = EntitlementView(
 
 # Where #7's resource_id resolves on the lab (the controller's job, not netctl's).
 RESOLVED_PATH = ResolvedPath(device="srl1", ingress_if="ethernet-1/1", egress_if="ethernet-1/2")
+
+# The canonical TELEMETRY sale (story ch. 7): ticket #8, the same router as a node.
+TELEMETRY_TICKET_ID = 8
+TELEMETRY_RESOURCE_ID = "0x" + f"{TELEMETRY_TICKET_ID:064x}"
+RESOLVED_NODE = ResolvedNode(device="srl1")
+
+TELEMETRY_ENTITLEMENT_VIEW = EntitlementView(
+    id=TELEMETRY_TICKET_ID,
+    issuer=BELL,
+    service_type=1,
+    resource_id=bytes.fromhex(TELEMETRY_RESOURCE_ID[2:]),
+    params=TelemetryParams(
+        sensor_paths=TELEMETRY_NEED.sensor_paths,
+        collector_endpoint=TELEMETRY_NEED.collector_endpoint,
+        sample_interval_s=TELEMETRY_NEED.sample_interval_s,
+    ),
+    start_time=WINDOW.start,
+    end_time=WINDOW.end,
+    revoked=False,
+    terms_hash=bytes.fromhex(TERMS_HASH[2:]),
+)
 
 DECISION_ACCEPT = DecisionOutput(accept=True, reason="meets need; price within budget")
