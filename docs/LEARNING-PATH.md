@@ -13,6 +13,14 @@ The one sentence to carry the whole way:
 (needs [Foundry](https://getfoundry.sh)) · `containerlab deploy -t netlab/topology.clab.yml`
 when you reach Phase 4.
 
+> **Prefer learning by doing, from absolute zero?** Take the notebook course first:
+> [`e2e/notebooks/course/`](../e2e/notebooks/course/README.md) — 15 progressive,
+> exercise-driven notebooks (no prior Python/blockchain/networking assumed) that build
+> and inspect every real module by hand, end with the full worked example, and close
+> with the evaluation + results/conclusions chapters. This reading path then works as
+> the reference route; the per-component `*_explore.ipynb` notebooks referenced below
+> are the compact tours the course links as deeper dives.
+
 ---
 
 ## Phase 0 — The idea and the map *(read, ~1h)*
