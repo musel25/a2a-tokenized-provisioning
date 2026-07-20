@@ -108,6 +108,8 @@ Read now (they land harder after the code). Each is a real decision with alterna
 predicate-ns (is the *architecture* slow?), revocation (does the ticket govern the wire?),
 gas (affordable?), adversarial (cheatable?), LLM (judgment viable?), baseline (cost of trustlessness?).
 
+- [ ] Read `docs/09a-evaluation-walkthrough.md` first if the report reads dense — same numbers,
+      built from zero (glosses median/gas/polling; no benchmarking or chain background assumed)
 - [ ] Read `docs/09-evaluation.md` — **§1–2 first** (existence proof vs evaluation; the two honest
       definitions of "enforced" and the five simulation boundaries), then each experiment
 - [ ] Read `e2e/src/e2e/experiments.py` — the harness (`TimingProvisioner` = rule 7 again; revocation uses the *real* watcher thread)

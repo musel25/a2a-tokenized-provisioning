@@ -5,6 +5,8 @@
 > in [`e2e/notebooks/evaluation_explore.ipynb`](../e2e/notebooks/evaluation_explore.ipynb).
 > These results were adversarially audited by a review panel before writing; the
 > corrections it forced are folded in (and noted where they matter).
+> **Narrative twin:** [`docs/09a-evaluation-walkthrough.md`](09a-evaluation-walkthrough.md)
+> builds every result here from zero, no prior benchmarking/chain knowledge assumed.
 
 ## 1. What the PoC proves, and what an evaluation adds
 
