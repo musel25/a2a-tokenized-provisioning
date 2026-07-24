@@ -2,9 +2,14 @@
 
 Ten-ish notebooks for a **complete beginner** — no Python-typing lore, no blockchain
 background, no networking experience assumed. The goal is not encyclopedic understanding
-of the repo: it is understanding **calibrated for writing the full-length paper** — the
-decisions and their alternatives, the mechanisms deep enough to defend in review, and an
-honest map of what was simplified and why.
+of the repo: it is understanding **calibrated for writing the full-length paper** (the
+IMRaD `main-arxiv.tex`, which the internship report expands) — the decisions and their
+alternatives, the mechanisms deep enough to defend in review, and an honest map of what
+was simplified and why. The paper's three research questions are the course's compass:
+**RQ1** (does the loop close: negotiate → atomic settle → real router honors/expires/
+revokes), **RQ2** (service invariance: when the product changes plane, only the
+translator changes — the paper's headline claim), **RQ3** (what trust minimization and
+LLM judgment cost, and what service granularity those costs permit).
 
 ## The method: rebuild, then reveal — then claim
 
@@ -38,19 +43,19 @@ asserts; you check yourself against the solution.
 
 ## The path
 
-| # | Notebook | You rebuild / do from scratch | The real thing you then run | Status |
-|---|---|---|---|---|
-| 00 | The problem | a naive Ada↔Bell trade; watch it fail three ways; the paper's claim stated | the story, the four trust domains | planned |
-| 01 | Ledgers, keys, shapes *(deliberately light)* | a toy ledger; keys→addresses; a dict → a validated `Offer` | a disposable Anvil chain; `a2a_interfaces` fixtures | planned |
-| 03 | The atomic swap | the settlement vending machine, robbery by robbery | `Settlement.sol` live: fulfill, replay-deny, revoke | **pilot — done** |
-| 04 | Signatures that contracts believe | sign a dict, break it, re-derive EIP-712 by hand | `chainmcp` signing vs the contract's digest | planned |
-| 05 | The bouncer | the predicate, check by check, attack by attack | the real `controller` domain + HTTP API | planned |
-| 06 | The hands *(light)* | "configure a router" as a toy; idempotent teardown; the resource map | `netctl` against the mock (lab optional) | planned |
-| 07a | Deploy an agent from zero | the pure tutorial: an LLM call → a hand-written tool loop → the same agent in LangGraph | a stub LLM (endpoint optional) | planned |
-| 07b | This project's agents | adapt 07a to the marketplace: judgment in exactly two places | the repo's LangGraph agents, A2A + MCP | planned |
-| 08 | The whole play | compose *your own toys* into the full lifecycle + revocation | the real skeleton, mock profile, side by side | planned |
-| 09 | Did it work? | the seven evaluation questions as a reviewer's objections | headline numbers recomputed from the committed dataset | planned |
-| 10 | The paper | — (the capstone assembles, it doesn't rebuild) | every claim → its notebook → its ADR → its live-recomputed number: the writing map | planned |
+| # | Notebook | You rebuild / do from scratch | The real thing you then run | Paper home | Status |
+|---|---|---|---|---|---|
+| 00 | The standing right | a per-request payment that can't carry a 2-hour promise; the naive trade failing three ways | the story; the gap table's three columns (machine payment / token credential / network activation) | §1, §2, §3 (RQ1–3) | planned |
+| 01 | Ledgers, keys, shapes *(deliberately light)* | a toy ledger; keys→addresses; a dict → a validated `Offer` | a disposable Anvil chain; `a2a_interfaces` fixtures | §2.3 primer | planned |
+| 03 | The atomic swap | the settlement vending machine, robbery by robbery | `Settlement.sol` live: fulfill, replay-deny, revoke | §4.3, §4.4 (RQ1) | **pilot — done** |
+| 04 | Signatures that contracts believe | sign a dict, break it, re-derive EIP-712 by hand; signing as inventory commitment | `chainmcp` signing vs the contract's digest, byte for byte | §4.4, §4.6 (keys) | planned |
+| 05 | The bouncer | challenge–response ownership proof (nonce by nonce), then the six-check predicate, attack by attack | the real `controller` domain + HTTP API; the revocation watcher | §4.5 steps 4/6, §4.6 (RQ1) | planned |
+| 06 | The hands — and the invariance bet | a bandwidth translator, then a telemetry translator from a *different plane*; discover only translate/teardown changed | `netctl` against the mock; the shim honesty note | §5.3, §5.4, §7.4 (**RQ2**) | planned |
+| 07a | Deploy an agent from zero | the pure tutorial: an LLM call → a hand-written tool loop → the same agent in LangGraph | a stub LLM (endpoint optional) | §2.1, §5.1 | planned |
+| 07b | This project's agents | judgment decides whether to *buy*; arithmetic decides whether you get *in* — the two LLM slots, the capacity ledger, fail-safe outputs | the repo's LangGraph agents on the stub; A2A cards + MCP custodians | §4.2, §4.5 steps 1–2, §5.1 | planned |
+| 08 | The whole play | compose *your own toys* into the six-step workflow + mid-window revocation | the real skeleton, mock profile, side by side | §4.5 end-to-end | planned |
+| 09 | Did it work? | the evaluation re-derived: 4 conditions × n=20, the 12-probe matrix with *predicted rejection layers*, two baselines isolating judgment vs trust | headline numbers recomputed from the committed dataset (89 ms / 3.27 s / 90 ns / gas table / 12-of-12) | §6, §7, §8.1 (RQ3) | planned |
+| 10 | The paper | — (the capstone assembles, it doesn't rebuild) | every claim → its RQ → its paper section → the notebook that rebuilt it → the ADR → the live-recomputed number | all of it | planned |
 
 (Chapter 02 was merged into 01 — the mechanics there matter less for the paper than the
 decisions elsewhere; 03 keeps its number so the pilot's identity is stable.)
