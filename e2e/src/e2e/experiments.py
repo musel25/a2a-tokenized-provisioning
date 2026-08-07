@@ -5,13 +5,17 @@ REAL stack — real Anvil, real controller, real gNMI against SR Linux, real (de
 LLM when `--mode llm` — never a simulation of it:
 
   latency      Where does the time go? N full lifecycles (negotiate → settle → authorize
-               → actuate → revoke), phase-timed, both service types, det and llm modes.
-               Also yields gas per tx (E3) and the revocation kill-switch lag (E2).
+               → actuate → revoke) driven through the REAL consumer/provider LangGraph
+               graphs: llm mode runs the two judgment slots live; det mode runs the
+               SAME graphs with the slots swapped for deterministic policies, so the
+               delta prices judgment and nothing else. Phase-timed, both service
+               types. Also yields gas per tx (E3) and the revocation lag (E2).
   expiry       How fast does chain-time expiry become device deconfiguration? (ADR-004)
   baseline     What does the same provisioning cost WITHOUT agents/chain/controller —
                one direct netctl call? The delta is the price of trustlessness. (E6)
-  adversarial  Can it be cheated? Ten attacks, each attributed to the layer that
-               rejected it (contract revert vs controller ErrorCode). (E4)
+  adversarial  Can it be cheated? Fourteen probes, each attributed to the layer that
+               rejected it (contract revert / controller ErrorCode / provider
+               admission), one allowed by design. (E4)
   llm          How reliable is the judgment layer? Schema-validity, retries, latency,
                tokens, and decision ACCURACY against ground truth. (E5)
 
@@ -29,14 +33,14 @@ import argparse
 import json
 import statistics
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from time import perf_counter
 
-import eth_abi
 from eth_account.messages import encode_defunct
+from fastapi.testclient import TestClient
 
-from a2a_interfaces import Offer
+from a2a_interfaces import Decline, Offer
 from a2a_interfaces.fixtures import (
     BANDWIDTH_NEED,
     BELL,
@@ -44,13 +48,24 @@ from a2a_interfaces.fixtures import (
     MOCK_TOK,
     RESOLVED_PATH,
     TELEMETRY_NEED,
-    TELEMETRY_RESOURCE_ID,
     TERMS_HASH,
     WINDOW,
+)
+from agents.a2a_adapter import loopback_quote
+from agents.catalogue import service_for
+from agents.consumer_graph import ConsumerState, build_consumer_graph
+from agents.mcp_tools import ChainConsumerTools, ChainProviderTools
+from agents.provider_graph import (
+    QUOTE_SYSTEM,
+    CapacityLedger,
+    QuoteDecision,
+    build_provider_graph,
+    quote_user_message,
 )
 from chainmcp import ChainClient, ChainReader
 from chainmcp.client import ChainRevert
 from chainmcp.testing import ANVIL_KEYS, launch_anvil
+from controller.app import build_app
 from controller.auth import AuthStore, proof_message
 from controller.resource_map import load_resource_map
 from controller.service import ControllerService, Denied
@@ -101,9 +116,27 @@ class TimingProvisioner:
         return self.inner.close()
 
 
+class GraphQuoteTools(ChainConsumerTools):
+    """ChainConsumerTools with the one deliberately-unimplemented tool implemented:
+    quotes DO arrive over A2A here — the loopback runs Bell's provider graph behind
+    the same JSON codec a served data part would carry (schema-level A2A, the stated
+    measurement boundary: no envelope assembled, no transport exercised). Per-node
+    negotiate timings (admit vs the quote slot) land in `negotiate_timings`."""
+
+    def __init__(self, consumer_chain, controller_url: str, http, provider_graph) -> None:
+        super().__init__(consumer_chain, controller_url, http=http)
+        self._provider_graph = provider_graph
+        self.negotiate_timings: dict[str, float] = {}
+
+    def quote(self, need):
+        result, self.negotiate_timings = loopback_quote(self._provider_graph, need)
+        return result
+
+
 @dataclass
 class Stack:
-    """One disposable evaluation stack: chain + clients + controller + timed gNMI."""
+    """One disposable evaluation stack: chain + clients + controller + timed gNMI,
+    plus the wired agent layer (graphs, tools, per-service capacity ledgers)."""
 
     anvil: object
     ada: ChainClient
@@ -114,6 +147,8 @@ class Stack:
     service: ControllerService
     nonce: int = 1000
     _watching: bool = False
+    api: TestClient | None = None
+    _agents: dict = field(default_factory=dict)
 
     @classmethod
     def up(cls, lab_ip: str) -> Stack:
@@ -132,7 +167,27 @@ class Stack:
         )
         service = ControllerService(reader, provisioner, AuthStore("bw-ctrl-1"),
                                     load_resource_map())
-        return cls(anvil, ada, bell, mallory, reader, provisioner, service)
+        stack = cls(anvil, ada, bell, mallory, reader, provisioner, service)
+        # The controller's REAL FastAPI app behind a sync in-process client — the same
+        # interface a deployed client sees, no live transport hop (the stated boundary).
+        stack.api = TestClient(build_app(service))
+        return stack
+
+    def agents_for(self, service: str, mode: str, llm):
+        """The wired agent layer for one (service, judgment-mode) pair — built once,
+        reused across runs, so the provider's CapacityLedger accumulates reservations
+        the way real inventory would (each revoked sale is released back below)."""
+        key = (service, mode)
+        if key not in self._agents:
+            svc = service_for(service)
+            ledger = CapacityLedger(svc.pool)
+            provider_tools = ChainProviderTools(self.bell)
+            provider_graph = build_provider_graph(llm, provider_tools, ledger)
+            tools = GraphQuoteTools(self.ada, str(self.api.base_url), self.api,
+                                    provider_graph)
+            consumer_graph = build_consumer_graph(llm, tools)
+            self._agents[key] = (consumer_graph, tools, provider_tools, ledger)
+        return self._agents[key]
 
     def watch(self) -> None:
         """Arm the real revocation watcher (the production mechanism, not a shortcut)."""
@@ -144,23 +199,18 @@ class Stack:
         self.anvil.increase_time(self.ada._w3, WINDOW.start + 120 - self.reader.chain_time())
 
     def fresh_offer(self, service: str, price_tok: int = 10) -> Offer:
+        """A hand-built offer for the DIRECT (non-graph) paths — expiry and the
+        adversarial probes construct precise offers themselves; the measured
+        lifecycles get theirs from the provider graph via ChainProviderTools."""
         self.nonce += 1
-        if service == "bandwidth":
-            return CANONICAL_OFFER.model_copy(update={
-                "salt": "0x" + f"{0xEA000 + self.nonce:064x}",
-                "price": str(price_tok * 10**18),
-            })
-        params = eth_abi.encode(
-            ["string[]", "string", "uint32"],
-            [TELEMETRY_NEED.sensor_paths, TELEMETRY_NEED.collector_endpoint,
-             TELEMETRY_NEED.sample_interval_s],
-        )
+        svc = service_for(service)
+        base = 0xEA000 if service == "bandwidth" else 0xEB000
         return Offer(
-            provider=BELL, consumer="0x" + "0" * 40, service_type=1,
-            resource_id=TELEMETRY_RESOURCE_ID, params="0x" + params.hex(),
+            provider=BELL, consumer="0x" + "0" * 40, service_type=svc.service_type,
+            resource_id=svc.resource_id, params=svc.encode_params(_need(service)),
             start_time=WINDOW.start, end_time=WINDOW.end, payment_token=MOCK_TOK,
             price=str(price_tok * 10**18), valid_until=WINDOW.end,
-            salt="0x" + f"{0xEB000 + self.nonce:064x}", terms_hash=TERMS_HASH,
+            salt="0x" + f"{base + self.nonce:064x}", terms_hash=TERMS_HASH,
         )
 
     def proof(self, challenge, eid: int, key: str = "ada") -> str:
@@ -174,6 +224,8 @@ class Stack:
             self.reader.close()
         except Exception:  # noqa: BLE001
             pass
+        if self.api is not None:
+            self.api.close()
         for c in (self.ada, self.bell, self.mallory):
             c.close()
         self.provisioner.close()
@@ -203,56 +255,72 @@ def _gas(client: ChainClient, tx_hash: str) -> int:
 
 
 def run_lifecycle(stack: Stack, service: str, mode: str, llm, budget_tok: int = 15) -> dict:
+    """One lifecycle through the REAL agent graphs (steps 1-4), then verify, revoke,
+    and watch enforcement drop (steps 5-6, harness-side — verification and the kill
+    switch are not consumer-agent actions).
+
+    Both modes run the same compiled graphs; `mode` only selects what sits in the two
+    judgment slots (llm = live model calls, det = list price + budget comparison), so
+    the det/llm delta prices the judgment layer and nothing else. Phases are split by
+    the ports' own clocks (tools.last_timings, TimingProvisioner — rule 7: nothing
+    differs at the port) plus node-boundary stamps from streaming the consumer graph;
+    what the inner clocks don't account for is reported as graph_overhead_s, and the
+    end-to-end figure is the graph's WALL CLOCK, not a sum of parts."""
     phases: dict[str, float] = {}
     gas: dict[str, int] = {}
+    need = _need(service)
+    consumer_graph, tools, provider_tools, ledger = stack.agents_for(
+        service, mode, llm if mode == "llm" else None)
 
-    # 1. negotiate — Bell prices, Ada judges (the two judgment slots, rule 1)
-    if mode == "llm":
-        from agents.provider_graph import QuoteDecision
+    stack.provisioner.last.clear()
+    tools.last_timings = {}
+    provider_tools.last_timings = {}
 
-        t0 = perf_counter()
-        quote = llm.structured(
-            "You are Bell, a network-service provider pricing one quote. Capacity is "
-            "confirmed available; your canonical list price is 10 TOK. Quote a fair "
-            "whole-TOK price between 5 and 25, or decline for a business reason.",
-            f"NEED: {_need(service).model_dump_json()}", QuoteDecision)
-        phases["quote_s"] = perf_counter() - t0
-        price = max(1, min(40, quote.price_tok)) if quote.quote else 10
-    else:
-        price = 10 if service == "bandwidth" else 8
+    # steps 1-4: request → quote (admit + price + sign, provider-side) → decide →
+    # settle → activate — the consumer graph drives; node boundaries are stamped
+    node_times: dict[str, float] = {}
+    final: dict = {}
+    t_wall0 = perf_counter()
+    t_prev = t_wall0
+    for chunk in consumer_graph.stream(
+        ConsumerState(need=need, budget_tok=budget_tok), stream_mode="updates"
+    ):
+        node, delta = next(iter(chunk.items()))
+        now = perf_counter()
+        node_times[node] = now - t_prev
+        t_prev = now
+        if delta is not None:
+            final.update(delta if isinstance(delta, dict) else vars(delta))
+    wall = perf_counter() - t_wall0
 
-    offer = stack.fresh_offer(service, price)
-    t0 = perf_counter()
-    signed = stack.bell.sign_offer(offer)
-    phases["sign_offer_s"] = perf_counter() - t0
+    # phase split: provider-graph nodes (admission arithmetic vs the quote slot), the
+    # tool-stamped signing/settle/activation clocks, the consumer decide node
+    neg = tools.negotiate_timings
+    phases["admit_s"] = neg.get("admit_s", 0.0)
+    sign = provider_tools.last_timings.get("sign_offer_s", 0.0)
+    phases["sign_offer_s"] = sign
+    phases["quote_s"] = max(0.0, neg.get("quote_s", 0.0) - sign)  # the pricing slot alone
+    phases["decide_s"] = node_times.get("decide", 0.0)
+    phases["settle_s"] = tools.last_timings.get("settle_s", 0.0)
+    phases["challenge_s"] = tools.last_timings.get("challenge_s", 0.0)
+    phases["sign_proof_s"] = tools.last_timings.get("sign_proof_s", 0.0)
+    phases["activate_s"] = tools.last_timings.get("activate_s", 0.0)
+    phases["gnmi_apply_s"] = stack.provisioner.last.get("gnmi_apply_s", 0.0)
+    accounted = sum(
+        phases[k] for k in ("admit_s", "quote_s", "sign_offer_s", "decide_s",
+                            "settle_s", "challenge_s", "sign_proof_s", "activate_s"))
+    phases["graph_overhead_s"] = max(0.0, wall - accounted)  # codec + LangGraph plumbing
+    phases["e2e_request_to_enforced_s"] = wall
 
-    if mode == "llm":
-        from agents.decision import decide
-
-        t0 = perf_counter()
-        verdict = decide(llm, _need(service), signed, budget_tok)
-        phases["decide_s"] = perf_counter() - t0
-        if not verdict.accept:
-            return {"ok": False, "err": "llm declined a within-budget offer",
-                    "phases": phases, "gas": gas, "service": service, "mode": mode}
-    else:
-        # the deterministic policy is one comparison; there is no det consumer graph to
-        # time, so decide_s is definitionally ~0 (stated as such in docs/09, not sold as a
-        # measured phase) — a plain if, not an assert (survives python -O)
-        t0 = perf_counter()
-        accept = price <= budget_tok
-        phases["decide_s"] = perf_counter() - t0
-        if not accept:
-            return {"ok": False, "err": "det declined a within-budget offer",
-                    "phases": phases, "gas": gas, "service": service, "mode": mode}
-
-    # 2. settle — approve + fulfill, atomically minting the ticket
-    t0 = perf_counter()
-    tx, eid = stack.ada.approve_and_fulfill(signed)
-    phases["settle_s"] = perf_counter() - t0
-    gas["fulfill"] = _gas(stack.ada, tx)
+    eid = final.get("entitlement_id")
+    session_id = final.get("session_id")
+    if eid is None or session_id is None:
+        last = (final.get("transcript") or ["no transcript"])[-1]
+        return {"ok": False, "err": f"lifecycle exited early — {last}",
+                "phases": phases, "gas": gas, "service": service, "mode": mode}
+    gas["fulfill"] = _gas(stack.ada, tools.last_tx_hash)
     try:  # the approve tx landed in the immediately preceding auto-mined block
-        receipt = stack.ada._w3.eth.get_transaction_receipt(tx)
+        receipt = stack.ada._w3.eth.get_transaction_receipt(tools.last_tx_hash)
         prev = stack.ada._w3.eth.get_block(receipt["blockNumber"] - 1)
         if prev["transactions"]:
             gas["approve"] = stack.ada._w3.eth.get_transaction_receipt(
@@ -260,36 +328,23 @@ def run_lifecycle(stack: Stack, service: str, mode: str, llm, budget_tok: int = 
     except Exception:  # noqa: BLE001 — approve gas is contextual, not load-bearing
         pass
 
-    # 3. authorize + actuate — challenge → proof → activate (predicate + gNMI inside)
-    t0 = perf_counter()
-    challenge = stack.service.challenge(eid)
-    phases["challenge_s"] = perf_counter() - t0
-    t0 = perf_counter()
-    sig = stack.proof(challenge, eid)
-    phases["sign_proof_s"] = perf_counter() - t0
-    stack.provisioner.last.clear()
-    t0 = perf_counter()
-    info = stack.service.activate(eid, service, challenge.nonce, sig)
-    phases["activate_s"] = perf_counter() - t0
-    phases["gnmi_apply_s"] = stack.provisioner.last.get("gnmi_apply_s", 0.0)
-
-    # 4. verify — the config is ON the device (read back over gNMI)
+    # 5. verify — the config is ON the device (read back over gNMI)
     names = _policer_names if service == "bandwidth" else _telemetry_names
     t0 = perf_counter()
-    present = f"a2a-{info.session_id}" in names(stack.provisioner)
+    present = f"a2a-{session_id}" in names(stack.provisioner)
     phases["verify_readback_s"] = perf_counter() - t0
     if not present:
         return {"ok": False, "err": "config not found on device after activate",
                 "phases": phases, "gas": gas, "service": service, "mode": mode}
 
-    # 5. revoke — the kill switch; lag = tx mined → config gone from the device,
+    # 6. revoke — the kill switch; lag = tx mined → config gone from the device,
     #    via the REAL watcher thread (poll interval WATCH_POLL_S)
     t0 = perf_counter()
     rtx = stack.bell.revoke(eid)  # blocks until mined
     t_mined = perf_counter()  # anchor immediately — before any extra RPC (harness-reviewer a)
     phases["revoke_tx_s"] = t_mined - t0
     deadline = t_mined + 15
-    while f"a2a-{info.session_id}" in names(stack.provisioner):
+    while f"a2a-{session_id}" in names(stack.provisioner):
         if perf_counter() > deadline:
             return {"ok": False, "err": "revocation not enforced within 15s",
                     "phases": phases, "gas": gas, "service": service, "mode": mode}
@@ -297,10 +352,9 @@ def run_lifecycle(stack: Stack, service: str, mode: str, llm, budget_tok: int = 
     phases["revocation_lag_s"] = perf_counter() - t_mined
     gas["revoke"] = _gas(stack.bell, rtx)  # receipt is immutable; fetch off the hot path
 
-    phases["e2e_request_to_enforced_s"] = sum(
-        phases.get(k, 0.0) for k in
-        ("quote_s", "sign_offer_s", "decide_s", "settle_s", "challenge_s",
-         "sign_proof_s", "activate_s"))
+    # the provider frees the inventory it just revoked — quote-time reservations are
+    # real bookkeeping, so the pool must get its units back once the sale is dead
+    ledger.release((need.window.start, need.window.end), service_for(service).demand(need))
     return {"ok": True, "phases": phases, "gas": gas, "service": service, "mode": mode}
 
 
@@ -466,14 +520,15 @@ def exp_adversarial(out: Path) -> list[dict]:
                 lambda: stack.service.activate(eid1, "bandwidth", ch2.nonce, good))
 
         ch2b = stack.service.challenge(eid1)
-        attempt("activate the same ticket twice (double-booking)", "controller",
+        attempt("activate the same entitlement twice (double-booking)", "controller",
                 lambda: stack.service.activate(eid1, "bandwidth", ch2b.nonce,
                                                stack.proof(ch2b, eid1)))
 
-        # NOT an attack the controller guards: a SECOND ticket on the same resource
-        # activates fine — per-resource capacity is the provider's CapacityLedger's
-        # job at quote time (M5.2); the controller's E_CONFLICT is per-ticket. Record
-        # it honestly as allowed-by-design so the report can discuss the layering.
+        # NOT an attack the controller guards: a SECOND entitlement on the same
+        # resource activates fine — per-resource capacity is the provider's
+        # CapacityLedger's job at quote time (M5.2); the controller's E_CONFLICT is
+        # per-entitlement. Record it honestly as allowed-by-design; the next probe
+        # shows the layer that DOES hold this line.
         offer2 = stack.fresh_offer("bandwidth")
         _, eid2 = stack.ada.approve_and_fulfill(stack.bell.sign_offer(offer2))
         ch3 = stack.service.challenge(eid2)
@@ -481,35 +536,60 @@ def exp_adversarial(out: Path) -> list[dict]:
             info2 = stack.service.activate(eid2, "bandwidth", ch3.nonce,
                                            stack.proof(ch3, eid2))
             results.append({"exp": "adversarial",
-                            "attack": "second ticket on the same resource",
+                            "attack": "second entitlement on the same resource",
                             "rejected": False, "layer": None, "code": None,
                             "by_design": "capacity is guarded at the provider's "
                                          "CapacityLedger (quote time), not the "
-                                         "controller; E_CONFLICT is per-ticket"})
-            _p("  second ticket on the same resource: allowed (by design — "
+                                         "controller; E_CONFLICT is per-entitlement "
+                                         "— see the oversell probe for the ledger "
+                                         "doing that job"})
+            _p("  second entitlement on the same resource: allowed (by design — "
                "provider-ledger guards capacity)")
             stack.service.teardown(info2.session_id)
         except Denied as err:  # would indicate the semantics changed under us
             results.append({"exp": "adversarial",
-                            "attack": "second ticket on the same resource",
+                            "attack": "second entitlement on the same resource",
                             "rejected": True, "layer": "controller",
                             "code": err.code.value})
         stack.service.teardown(info1.session_id)  # clean slate for the next cases
 
+        # -- provider-admission layer: the other half of the layering above --------
+        # The same second-sale pressure at QUOTE time. A pool with room for exactly
+        # one sale is asked twice; the ledger refuses arithmetic overselling BEFORE
+        # any offer exists to sign — measured here, not asserted elsewhere.
+        need_bw = _need("bandwidth")
+        pool = CapacityLedger(service_for("bandwidth").demand(need_bw))
+        pgraph = build_provider_graph(None, ChainProviderTools(stack.bell), pool)
+        first_sale, _ = loopback_quote(pgraph, need_bw)
+        second_sale, _ = loopback_quote(pgraph, need_bw)
+        oversold_refused = isinstance(second_sale, Decline)
+        results.append({
+            "exp": "adversarial",
+            "attack": "oversell the resource pool at quote time",
+            "rejected": oversold_refused,
+            "layer": "provider-admission" if oversold_refused else None,
+            "code": second_sale.reason if oversold_refused else None,
+            "expected_layer": "provider-admission",
+            "first_sale_ok": not isinstance(first_sale, Decline),
+        })
+        _p("  oversell the resource pool at quote time: "
+           + ("rejected by provider admission (no overselling)"
+              if oversold_refused else "!! NOT REJECTED"))
+
         offer3s = stack.fresh_offer("bandwidth")
         _, eid3s = stack.ada.approve_and_fulfill(stack.bell.sign_offer(offer3s))
         ch_scope = stack.service.challenge(eid3s)
-        attempt("telemetry action on a bandwidth ticket (scope)", "controller",
+        attempt("telemetry action on a bandwidth entitlement (scope)", "controller",
                 lambda: stack.service.activate(eid3s, "telemetry", ch_scope.nonce,
                                                stack.proof(ch_scope, eid3s)))
 
         stack.bell.revoke(eid3s)
         ch4 = stack.service.challenge(eid3s)
-        attempt("activate a revoked ticket", "controller",
+        attempt("activate a revoked entitlement", "controller",
                 lambda: stack.service.activate(eid3s, "bandwidth", ch4.nonce,
                                                stack.proof(ch4, eid3s)))
 
-        attempt("challenge for a nonexistent ticket", "controller",
+        attempt("challenge for a nonexistent entitlement", "controller",
                 lambda: stack.service.challenge(999))
 
         # -- after the window (one-way warp; keep last). The challenge is issued
@@ -539,20 +619,19 @@ def exp_llm(out: Path) -> list[dict]:
         return []
     from agents.decision import decide
     from agents.llm import StructuredError
-    from agents.provider_graph import QuoteDecision
 
     samples = []
 
-    # quote slot: 10 needs of varying size — schema validity + price-range compliance
+    # quote slot: 10 needs of varying size — schema validity + price-range compliance,
+    # through the SAME prompt the provider graph runs (one source of truth)
     for i, mbps in enumerate((10, 20, 30, 50, 80, 100, 150, 200, 300, 500)):
         need = BANDWIDTH_NEED.model_copy(update={"capacity_bps": mbps * 1_000_000})
         t0 = perf_counter()
         try:
             q = llm.structured(
-                "You are Bell, a network-service provider pricing one quote. Capacity "
-                "is confirmed available; your canonical list price is 10 TOK. Quote a "
-                "fair whole-TOK price between 5 and 25, or decline for a business "
-                "reason.", f"NEED: {need.model_dump_json()}", QuoteDecision)
+                QUOTE_SYSTEM,
+                quote_user_message(need, service_for("bandwidth").list_price_tok),
+                QuoteDecision)
             samples.append({"exp": "llm", "slot": "quote", "case": f"{mbps}mbps",
                             "ok": True, "latency_s": perf_counter() - t0,
                             "attempts": llm.last_attempts, "usage": llm.last_usage,
@@ -619,13 +698,14 @@ def exp_predicate(out: Path) -> list[dict]:
     owner = "0x" + "a" * 40
     mid = WINDOW.start + 60
     cases = {
-        "allow": (V, owner, owner, mid, set()),
-        "E_NOT_OWNER": (V, owner, "0x" + "b" * 40, mid, set()),
-        "E_NOT_STARTED": (V, owner, owner, WINDOW.start - 10, set()),
-        "E_EXPIRED": (V, owner, owner, WINDOW.end + 10, set()),
-        "E_REVOKED": (V.model_copy(update={"revoked": True}), owner, owner, mid, set()),
-        "E_SCOPE": (V.model_copy(update={"service_type": 9}), owner, owner, mid, set()),
-        "E_CONFLICT": (V, owner, owner, mid, {V.id}),
+        "allow": (V, owner, owner, mid, set(), "bandwidth"),
+        "E_NOT_OWNER": (V, owner, "0x" + "b" * 40, mid, set(), "bandwidth"),
+        "E_NOT_STARTED": (V, owner, owner, WINDOW.start - 10, set(), "bandwidth"),
+        "E_EXPIRED": (V, owner, owner, WINDOW.end + 10, set(), "bandwidth"),
+        "E_REVOKED": (V.model_copy(update={"revoked": True}), owner, owner, mid, set(),
+                      "bandwidth"),
+        "E_SCOPE": (V, owner, owner, mid, set(), "telemetry"),  # action/type mismatch
+        "E_CONFLICT": (V, owner, owner, mid, {V.id}, "bandwidth"),
     }
     samples = []
     loops = 200_000

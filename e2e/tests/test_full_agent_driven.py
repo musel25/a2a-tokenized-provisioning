@@ -106,7 +106,7 @@ def _run_lifecycle(anvil, ada, bell, controller_http, decision: DecisionOutput):
     provider = build_provider_graph(
         _FakeLLM(QuoteDecision(quote=True, price_tok=10, reason="fair")),
         ChainProviderTools(bell),
-        CapacityLedger(capacity_bps=100_000_000),
+        CapacityLedger(capacity=100_000_000),
     )
     offer = provider.invoke(ProviderState(need=BANDWIDTH_NEED))["result"]
     assert isinstance(offer, SignedOffer)

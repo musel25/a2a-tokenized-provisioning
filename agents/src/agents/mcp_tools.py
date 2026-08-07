@@ -44,12 +44,14 @@ class ChainConsumerTools:
         self._controller_url = controller_url.rstrip("/")
         self._http = http or httpx.Client(timeout=10)
         self.last_timings: dict[str, float] = {}
+        self.last_tx_hash: str | None = None  # the most recent settle's fulfill tx
 
     def settle(self, offer: SignedOffer) -> int:
         t0 = perf_counter()
-        eid = self._chain["fulfill_offer"](offer.model_dump(mode="json"))["entitlement_id"]
+        result = self._chain["fulfill_offer"](offer.model_dump(mode="json"))
         self.last_timings["settle_s"] = perf_counter() - t0
-        return eid
+        self.last_tx_hash = result.get("tx_hash")
+        return result["entitlement_id"]
 
     def activate(self, entitlement_id: int, kind: str) -> str:
         """The deliberate three tool calls (docs/03 §6.2): challenge → sign → submit.
@@ -74,11 +76,9 @@ class ChainConsumerTools:
         )
         activation = response.json()
         t3 = perf_counter()
-        self.last_timings = {
-            "challenge_s": t1 - t0,
-            "sign_proof_s": t2 - t1,
-            "activate_s": t3 - t2,
-        }
+        self.last_timings.update(  # merge — settle_s from the same lifecycle survives
+            challenge_s=t1 - t0, sign_proof_s=t2 - t1, activate_s=t3 - t2
+        )
         if "session_id" not in activation:
             raise RuntimeError(f"activation denied: {activation}")
         return activation["session_id"]
