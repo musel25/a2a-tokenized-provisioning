@@ -25,8 +25,6 @@ from .auth import AuthStore, Challenge
 from .domain import predicate, transition
 from .translators import UnmappedResource, translate
 
-_ACTION_KINDS = {"bandwidth": 0, "telemetry": 1}
-
 
 class Denied(Exception):
     """Activation/lookup refused; carries the ErrorCode the API maps to a status."""
@@ -81,11 +79,9 @@ class ControllerService:
         active_ids = {
             s.entitlement_id for s in self._sessions.values() if s.state == SessionState.ACTIVE
         }
-        denial = predicate(view, owner, owner, now, active_ids)
+        denial = predicate(view, owner, owner, now, active_ids, action_kind)
         if denial is not None:
             raise Denied(denial)
-        if _ACTION_KINDS.get(action_kind) != view.service_type:
-            raise Denied(ErrorCode.E_SCOPE)  # a telemetry action on a bandwidth ticket
 
         session_id = f"ent{entitlement_id}-a{self._seq}"
         self._seq += 1

@@ -16,6 +16,10 @@ from a2a_interfaces import EntitlementView, ErrorCode, SessionState
 # mid-provision — E_SCOPE is the honest early answer.
 KNOWN_SERVICE_TYPES = (0, 1)  # 0 = bandwidth, 1 = telemetry (both real since M3.3)
 
+# The action vocabulary a requester may name, mapped to the serviceType it needs.
+# Pure data, so the scope check can live entirely inside the predicate (rule 4).
+ACTION_KINDS = {"bandwidth": 0, "telemetry": 1}
+
 
 def predicate(
     view: EntitlementView,
@@ -23,6 +27,7 @@ def predicate(
     requester: str,
     now: int,
     active_ids: set[int],
+    action_kind: str | None = None,
     known_service_types: tuple[int, ...] = KNOWN_SERVICE_TYPES,
 ) -> ErrorCode | None:
     """Return None if activation is allowed, else the FIRST failing ErrorCode.
@@ -30,6 +35,11 @@ def predicate(
     Order is contract (docs/05 §2): who → not-yet → expired → revoked → scope →
     conflict. `now` is chain time (ADR-004); `owner` is `ownerOf(id)`; `active_ids`
     are entitlements with a currently-active session (the no-double-booking guard).
+    The scope check is two-sided: the entitlement's type must be one this controller
+    can translate, and — when the caller names the action it intends (`action_kind`)
+    — that action must be what the entitlement grants (a telemetry action on a
+    bandwidth entitlement is E_SCOPE, docs/05 §2). Callers with no action in hand
+    (ownership-only checks) pass None and get the type-side check alone.
     `known_service_types` is caller-dependent by definition — "has a translator" means
     *this* controller's translators (the M0.3 stub only wires bandwidth, for example).
     """
@@ -42,6 +52,8 @@ def predicate(
     if view.revoked:
         return ErrorCode.E_REVOKED
     if view.service_type not in known_service_types:
+        return ErrorCode.E_SCOPE
+    if action_kind is not None and ACTION_KINDS.get(action_kind) != view.service_type:
         return ErrorCode.E_SCOPE
     if view.id in active_ids:
         return ErrorCode.E_CONFLICT

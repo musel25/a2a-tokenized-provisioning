@@ -69,6 +69,27 @@ def test_scope_is_caller_dependent():
     )
 
 
+def test_scope_matches_the_requested_action():
+    # The other side of the scope check (docs/05 §2): a telemetry action against a
+    # bandwidth entitlement is refused INSIDE the predicate — E_SCOPE has one home.
+    assert predicate(VIEW, ADA, ADA, IN_WINDOW, set(), action_kind="bandwidth") is None
+    code = predicate(VIEW, ADA, ADA, IN_WINDOW, set(), action_kind="telemetry")
+    assert code == ErrorCode.E_SCOPE
+
+
+def test_scope_rejects_an_unknown_action_kind():
+    code = predicate(VIEW, ADA, ADA, IN_WINDOW, set(), action_kind="quantum")
+    assert code == ErrorCode.E_SCOPE
+
+
+def test_ownership_only_callers_omit_the_action():
+    # action_kind=None: the type-side scope check alone — the pre-fold behavior,
+    # for callers holding no intended action (e.g. an ownership probe).
+    alien = VIEW.model_copy(update={"service_type": 7})
+    assert predicate(VIEW, ADA, ADA, IN_WINDOW, set()) is None
+    assert predicate(alien, ADA, ADA, IN_WINDOW, set()) == ErrorCode.E_SCOPE
+
+
 def test_denies_double_booking():
     code = predicate(VIEW, ADA, ADA, now=IN_WINDOW, active_ids={VIEW.id})
     assert code == ErrorCode.E_CONFLICT
