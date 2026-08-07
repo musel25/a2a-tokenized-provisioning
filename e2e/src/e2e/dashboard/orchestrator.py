@@ -22,19 +22,18 @@ import time
 from dataclasses import dataclass, field
 from typing import Callable
 
-import eth_abi
-
-from a2a_interfaces import Offer
+from a2a_interfaces import Decline
 from a2a_interfaces.fixtures import (
     ADA,
     BELL,
     CANONICAL_OFFER,
     MOCK_TOK,
     TELEMETRY_NEED,
-    TELEMETRY_RESOURCE_ID,
-    TERMS_HASH,
     WINDOW,
 )
+from agents.catalogue import service_for
+from agents.mcp_tools import ChainProviderTools
+from agents.provider_graph import CapacityLedger, ProviderState, build_provider_graph
 from chainmcp import ChainClient, ChainReader
 from chainmcp.mcp_server import chain_tools
 from chainmcp.testing import ANVIL_KEYS, anvil_available, artifacts_available, launch_anvil
@@ -66,7 +65,8 @@ class Console:
     llm_model: str = ""
     llm_status: str = "off"  # off | warming | up | down — surfaced in the header pill
     llm_muted: bool = False  # operator toggle: force deterministic even with the LLM warm
-    _nonce: int = 100  # bumped per provision so each offer has a fresh salt (single-use, I2)
+    ledgers: dict = field(default_factory=dict)  # service → CapacityLedger (persists across buys)
+    _provider_tools: object = None  # ChainProviderTools over Bell's chainmcp
     _lock: threading.Lock = field(default_factory=threading.Lock)
 
     # --- capability + lifecycle ---------------------------------------------
@@ -139,6 +139,11 @@ class Console:
                 self.reader, net, AuthStore(self.controller_id), load_resource_map()
             )
             emit(_ev("boot", "controller", "Controller ready", "predicate · auth · session machine"))
+            # Bell's REAL agent layer: signing tools + one capacity ledger per product
+            # (the eval's quote-time admission, live in the demo — pools drain and refill)
+            self._provider_tools = ChainProviderTools(self.bell)
+            self.ledgers = {k: CapacityLedger(service_for(k).pool)
+                            for k in ("bandwidth", "telemetry")}
 
     def _seed_presales(self) -> None:
         carol = _client("carol", self.anvil)
@@ -165,6 +170,8 @@ class Console:
             self.anvil = self.ada = self.bell = self.reader = self.controller = self.provisioner = None
             self.lab_ip = None
             self.sessions = {}
+            self.ledgers = {}
+            self._provider_tools = None
 
     def close(self) -> None:
         self.reset()
@@ -185,22 +192,25 @@ class Console:
     def provision(self, service: str, budget_tok: int, emit: Emit) -> None:
         self.ensure_started(emit)
         self.last_service = service
-        self._nonce += 1  # a fresh salt each click — every offer is single-use (I2)
         need = _need_for(service)
         eid = None
         try:
-            # 1. AGENT — discovery + quote (A2A); the two judgment slots (rule 1) run on
-            # the real LLM when the endpoint is warm, deterministic stand-ins when not.
+            # 1. AGENT — discovery + quote (A2A); Bell's REAL provider graph runs
+            # (deterministic admission on the shared ledger, then the quote slot — live
+            # LLM when the endpoint is warm, the list-price policy when not).
             emit(_stage("agent", "Agents negotiate"))
             emit(_a2a("Ada", "Bell", f"quote_{service}",
                       f"need {service} · {_mbps(need)} · window 14:00–16:00",
                       expand=_a2a_out(service, need)))
-            price, quote_note = self._bell_quote(service, need, emit)
-            if price is None:  # Bell's judgment: decline for a business reason
+            result, quote_note, transcript = self._bell_negotiate(service, need, emit)
+            if transcript:  # admission first — arithmetic, never judgment
+                emit(_admit(service, transcript[0], self._pool_note(service, need)))
+            if isinstance(result, Decline):
                 emit(_decision("Bell", False, quote_note))
-                emit(_done(False, f"Bell declined to quote — {quote_note}"))
+                emit(_done(False, f"Bell declined — {quote_note}"))
                 return
-            offer = self._offer_for(service, self._nonce, price)
+            offer = result
+            price = int(offer.offer.price) // 10**18
             emit(_mcp("Bell", "chainmcp", "sign_offer",
                       f"{service} @ {price} TOK", "EIP-712 signature (65 bytes)",
                       expand={"server": "chainmcp (Bell's key custody)", "tool": "sign_offer",
@@ -291,34 +301,48 @@ class Console:
             emit(_stage("network", "Enforcement withdrawn"))
             self._emit_teardown(eid, sid, emit)
             self.sessions[eid] = None
-            emit(_done(True, f"Ticket #{eid} revoked. Throughput returned to unshaped."))
+            # Bell frees the inventory it revoked — the pool refills for the next sale
+            kind = "bandwidth" if self.reader.get(eid).service_type == 0 else "telemetry"
+            svc, need = service_for(kind), _need_for(kind)
+            self.ledgers[kind].release((need.window.start, need.window.end), svc.demand(need))
+            emit(_done(True, f"Entitlement #{eid} revoked. Throughput returned to unshaped."))
         except Exception as err:  # noqa: BLE001
             emit(_ev("error", "chain", "Revoke failed", str(err)[:200]))
 
     # --- the two judgment slots (rule 1: the ONLY places LLM output matters) --
 
-    def _bell_quote(self, service: str, need, emit: Emit) -> tuple[int | None, str]:
-        """Bell prices the quote. Live LLM → a real judgment (prices vary run to run);
-        otherwise the canonical list price. Returns (price_tok, note) or (None, reason)."""
-        canonical = 10 if service == "bandwidth" else 8
-        if not self.llm_live():
-            return canonical, "canonical list price (deterministic stand-in)"
-        emit(_ev("thinking", "agent", "Bell is pricing…", f"real judgment · {self.llm_model}"))
-        try:
-            from agents.provider_graph import QuoteDecision
+    def _bell_negotiate(self, service: str, need, emit: Emit):
+        """Bell's REAL provider graph — the same one the evaluation measures:
+        deterministic admission on the persistent per-service ledger, then the quote
+        slot (live LLM when warm, the catalogue list price otherwise). Returns
+        (SignedOffer | Decline, note, transcript)."""
+        llm = self.llm if self.llm_live() else None
+        if llm is not None:
+            emit(_ev("thinking", "agent", "Bell is pricing…", f"real judgment · {self.llm_model}"))
+        graph = build_provider_graph(llm, self._provider_tools, self.ledgers[service])
+        state = graph.invoke(ProviderState(need=need))
+        result, transcript = state["result"], state["transcript"]
+        if llm is not None and isinstance(result, Decline) and "could not price" in result.reason:
+            # an endpoint hiccup must not kill a live demo: rerun the SAME graph with
+            # the deterministic slot (admission again, list price), and say so
+            graph = build_provider_graph(None, self._provider_tools, self.ledgers[service])
+            state = graph.invoke(ProviderState(need=need))
+            result, transcript = state["result"], state["transcript"]
+            note = "list price (LLM fallback after a schema failure)"
+        elif llm is not None:
+            note = (f"judged by {self.llm_model}" if isinstance(result, Decline)
+                    else f"priced by {self.llm_model}")
+        else:
+            note = "catalogue list price (deterministic slot)"
+        if isinstance(result, Decline):
+            note = f"{result.reason} · {note}"
+        return result, note, transcript
 
-            out = self.llm.structured(
-                "You are Bell, a network-service provider pricing one quote. Capacity is "
-                f"confirmed available; your canonical list price is {canonical} TOK. Quote "
-                "a fair whole-TOK price between 5 and 25, or decline for a business reason.",
-                f"NEED: {need.model_dump_json()}",
-                QuoteDecision,
-            )
-            if not out.quote:
-                return None, f"{out.reason} · judged by {self.llm_model}"
-            return max(1, min(40, out.price_tok)), f"priced by {self.llm_model}: {out.reason}"
-        except Exception as err:  # noqa: BLE001 — judgment may fail; commerce falls back, never crashes
-            return canonical, f"canonical list price (LLM fallback: {type(err).__name__})"
+    def _pool_note(self, service: str, need) -> str:
+        svc = service_for(service)
+        window = (need.window.start, need.window.end)
+        return (f"pool: {svc.fmt(self.ledgers[service].available(window))} of "
+                f"{svc.fmt(svc.pool)} still free this window")
 
     def _ada_decide(self, need, offer, budget_tok: int, emit: Emit) -> tuple[bool, str]:
         """Ada judges the signed offer — the real `agents.decision.decide` when the LLM
@@ -662,29 +686,6 @@ def _predicate_checks(view, now: int, owner: str) -> list[dict]:
     ]
 
 
-def _telemetry_offer(bell: ChainClient, nonce: int, collector_endpoint: str,
-                     price_tok: int) -> object:
-    params = eth_abi.encode(
-        ["string[]", "string", "uint32"],
-        [TELEMETRY_NEED.sensor_paths, collector_endpoint, TELEMETRY_NEED.sample_interval_s],
-    )
-    offer = Offer(
-        provider=BELL,
-        consumer="0x" + "0" * 40,
-        service_type=1,
-        resource_id=TELEMETRY_RESOURCE_ID,
-        params="0x" + params.hex(),
-        start_time=WINDOW.start,
-        end_time=WINDOW.end,
-        payment_token=MOCK_TOK,
-        price=str(price_tok * 10**18),
-        valid_until=WINDOW.end,
-        salt="0x" + f"{0x7E000 + nonce:064x}",
-        terms_hash=TERMS_HASH,
-    )
-    return bell.sign_offer(offer)
-
-
 def _shim() -> None:
     from pathlib import Path
 
@@ -708,17 +709,9 @@ def _iperf() -> dict:
         return {"received_mbps": 0.0, "loss_pct": 0.0}
 
 
-# bind the offer builder onto Console (needs bell + a per-click nonce for a fresh salt)
-def _console_offer_for(self: Console, service: str, nonce: int, price_tok: int):
-    if service == "bandwidth":
-        offer = CANONICAL_OFFER.model_copy(update={
-            "salt": "0x" + f"{0x5A000 + nonce:064x}",
-            "price": str(price_tok * 10**18),  # Bell's judgment sets the price when live
-        })
-        return self.bell.sign_offer(offer)
-    # telemetry: the offer names Ada's collector; the ticket buys the right to write a
-    # gNMI export destination to the router pointing there (ADR-007).
-    return _telemetry_offer(self.bell, nonce, TELEMETRY_NEED.collector_endpoint, price_tok)
-
-
-Console._offer_for = _console_offer_for
+def _admit(service: str, transcript_line: str, pool_note: str) -> dict:
+    """Bell's admission verdict — arithmetic, never judgment (the overselling guard)."""
+    detail = transcript_line.split(": ", 1)[-1]
+    return {"kind": "admit", "domain": "agent", "service": service,
+            "title": "Bell's admission control", "detail": f"{detail} · {pool_note}",
+            "t": _now_ms()}
