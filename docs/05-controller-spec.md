@@ -4,7 +4,6 @@
 > Every rule here has (or will have) a named test next to it; an untested rule is a claim.
 > **Companions:** `docs/03-interfaces.md` §3/§4/§5 (the surfaces this implements) ·
 > DESIGN.md §7.4 (the predicate's origin) · `CLAUDE.md` rules 1, 4, 5, 6.
-> *(Numbering note: coexists with `05-from-scratch.md`, same precedent as the two 04s.)*
 
 ---
 

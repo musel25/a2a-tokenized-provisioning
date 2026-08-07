@@ -101,20 +101,20 @@ shape change ⇒ `v` bump + `docs/03` in the *same* commit, never a follow-up.
 
 ### The inspection surface is a first-class deliverable (not optional polish)
 
-The human learns by **doing**, not reading. So every slice that ships inspectable code
-also ships (or extends) a hands-on surface — a Jupyter notebook under `e2e/notebooks/`
-for Python, an `EXPLORE*.md` cast lab for Solidity — that *builds and inspects the real
-component by hand*, not an abstracted wrapper. Three surfaces, and the order to teach them:
+The human learns by **doing**, not reading. The hands-on surfaces, and the order to
+teach them:
 
-1. **`e2e/notebooks/<topic>_explore.ipynb`** — the *guided tour*: build + inspect every
-   new component, with markdown between cells explaining the "why". This is the executable
-   twin of that slice's walkthrough doc. Verify it runs green headless
-   (`uv run --group demo jupyter nbconvert --to notebook --execute`) before commit.
-2. **`e2e/notebooks/scratch_inspect.ipynb`** — the *blank bench*: keep its pre-wired
-   imports current as modules move, but leave it playground-empty (never committed as
-   evidence). If a slice renames/relocates a module the scratch imports touch, fix them.
-3. **`contracts/EXPLORE*.md`** — the Solidity surface: `forge inspect` / `cast` against a
-   live Anvil, so contracts are inspected and driven, never only tested.
+1. **`e2e/notebooks/course/`** — the chaptered course: each notebook rebuilds one layer
+   from zero (ledgers → atomic swap → signatures → the bouncer → the hands → agents),
+   importing the real components only after deriving them. This is the learning route.
+2. **`e2e/notebooks/paper.ipynb`** — the paper as one executable artifact: a live
+   lifecycle through the real graphs plus every evaluation figure, with §5 asserts that
+   fail if prose and data drift. Re-execute with `just paper-nb` before commit.
+3. **`e2e/notebooks/evaluation_explore.ipynb`** — the figures notebook `just eval`
+   re-renders against `e2e/runs/eval/`.
+
+Verify any notebook you touch runs green headless
+(`uv run --group demo jupyter nbconvert --to notebook --execute`) before commit.
 
 When planning a slice, name its inspection surface up front (which notebook is created or
 extended, and what the human will poke) alongside the code and evidence — same as tests.

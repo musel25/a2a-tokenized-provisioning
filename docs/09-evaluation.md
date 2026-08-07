@@ -11,9 +11,9 @@
 > client). The deterministic condition is the *same graphs* with the judgment slots
 > swapped for deterministic policies — no more harness shortcut. The adversarial matrix
 > grew a fourteenth probe: overselling, rejected at the provider-admission layer.
-> **Narrative twin:** [`docs/09a-evaluation-walkthrough.md`](09a-evaluation-walkthrough.md)
-> builds every result here from zero, no prior benchmarking/chain knowledge assumed
-> (its numbers predate the 2026-08-07 re-run; this file is the ground truth).
+> **Executable twin:** [`e2e/notebooks/paper.ipynb`](../e2e/notebooks/paper.ipynb)
+> recomputes every number here from the raw JSONL and runs a live lifecycle;
+> its §5 asserts fail if this file and the data ever drift.
 
 ## 1. What the PoC proves, and what an evaluation adds
 

@@ -1,16 +1,17 @@
-# 08 — Demo & dashboard: the runbook (Phase 6)
+# 08 — Demo: the operator console runbook
 
-> **Status:** the demo script (M6.5) + the dashboard guide (M6.4). Rehearse cold, twice.
+> **Status:** the presentation runbook. Rehearse cold, twice.
 > **Companions:** `docs/00-the-story.md` (the narrative this dramatizes) ·
-> `e2e/src/e2e/demo.py` (the demo as code) · ADR-003 (dashboard, jury-first).
+> `e2e/src/e2e/dashboard/` (the console as code) · ADR-003 (jury-first) ·
+> `e2e/notebooks/paper.ipynb` (the same system as the paper's executable twin).
 
 ---
 
 ## The one-line pitch
 
 *AI agents buy network services from each other; payment is atomically exchanged for an
-on-chain ticket; a deterministic controller honors the ticket by configuring a real
-router — and when the ticket is revoked on-chain, the bandwidth dies mid-stream.*
+on-chain entitlement; a deterministic controller honors the entitlement by configuring a
+real router — and when the entitlement is revoked on-chain, the bandwidth dies mid-stream.*
 
 ## The operator console (M6.4 — the interactive way to run and watch it)
 
@@ -56,52 +57,46 @@ network). **The pill is a switch**: click it to mute/unmute live judgment mid-se
 run one provision deterministic and the next on the model to contrast the two. Without the lab the console still runs everything real except the router lane,
 which says so honestly.
 
-## The file-tailing view (headless / no browser)
-
-```sh
-uv run python -m e2e.dashboard.demo_run                          # writes the epilogue as events
-uv run --group demo streamlit run e2e/src/e2e/dashboard/app.py   # three-column tail
-```
-
-Local Ollama for the agents' judgment (ADR-001, defense-day rule — no network in the
-room): `ollama serve` with a model that answers fast enough to feel live.
-
 ## The script (three beats)
 
-### Beat 1 — bandwidth, the happy path (M6.2)
+All three beats are driven from the console — type the request, watch the relay.
 
-`uv run python -m e2e.demo` runs it; the narration prints and the dashboard fills:
+### Beat 1 — bandwidth, the happy path
+
+Ask Ada: *"Get me 50 Mbps from hostA to hostB, budget 12 TOK."* The stream fills:
 
 ```
-fulfill      (chain)      Ada buys a 50 Mbps ticket from Bell
+admit        (agents)     Bell's admission: reserved 50 Mbps · pool 950/1000 free
+fulfill      (chain)      Ada buys a 50 Mbps entitlement from Bell
 apply_bandwidth (network) gNMI Set: policer 50 Mbps on srl1
-  bandwidth: 100M offered → 49.1 Mbps (policed)          ← the plateau, live iperf
-teardown     (network)    window ends → policer removed
-  bandwidth: after teardown → 100.0 Mbps (full)          ← the ticket expired, service gone
+  bandwidth: 100M offered → 49 Mbps (policed)            ← the plateau, live iperf
 ```
 
 The plateau is the thesis's favorite picture: throughput obeys a number that lives on a
 blockchain.
 
-### Beat 2 — telemetry, "same machine, different translator" (M6.3)
+### Beat 2 — telemetry, "same machine, different translator"
 
-The same run continues into telemetry — and the point is *how little changed*:
+Ask Ada: *"Buy me the right to configure telemetry export on srl1."* The point is *how
+little changed*:
 
 ```
+admit        (agents)     Bell's admission: reserved 1 collector slot · pool 7/8 free
 apply_telemetry (network) gNMI Set: telemetry export destination on srl1 → Ada's collector
-  telemetry: export a2a-demo-tel configured on srl1
+  telemetry: export a2a-ent8-a1 configured on srl1
 ```
 
-The telemetry ticket is the *right to configure telemetry export on the device*
+The telemetry entitlement is the *right to configure telemetry export on the device*
 (ADR-007): the controller writes a `grpc-tunnel destination` to srl1 — symmetric with the
 bandwidth policer. Same controller, same auth, same session machine, same provisioner
 object — only the translator (`translate_bandwidth` → `translate_telemetry`) and the one
 provisioner call differ (a different config subtree). That delta *is* a thesis result: the
 architecture generalizes across products for the cost of one translator.
 
-### Beat 3 — the revocation finale (M4.5, the jury-gold moment)
+### Beat 3 — the revocation finale (the jury-gold moment)
 
-The showpiece, proven live in `e2e/tests/test_controller_showpiece.py` and narrated:
+Click **Revoke entitlement ✕**. The showpiece, proven live in
+`e2e/tests/test_controller_showpiece.py` and now on screen:
 
 ```
 14:02  session ACTIVE     iperf 100M → 49.3 Mbps received   (policed at 50)
@@ -113,15 +108,16 @@ The showpiece, proven live in `e2e/tests/test_controller_showpiece.py` and narra
 The throughput line dies mid-window because an ERC-721 flag flipped on a blockchain.
 Nobody touched the router; the controller watched the chain and acted.
 
-## The dashboard (M6.4, ADR-003)
+## The console's anatomy (ADR-003)
 
-Three columns — **chain · controller · network** — the trust domains, because the honest
-story is *which domain is trusted to have done what*. The agent judgment (the two LLM
-slots) is tinted apart. The current narration sits on top, in the epilogue's own words.
-Events are JSONL under `e2e/runs/<ts>/events.jsonl` (docs/03 §8) — append-only, so a
-crashing run is still readable, and `cat` works when there's no projector.
+The **trust relay** is the paper's Fig. 1 in motion: four stations — agents · chain ·
+controller · network — badged with the workflow's step numbers (1–2 / 3 / 4 / 5–6) and
+R1–R6 requirement chips (hover for the definition), because the honest story is *which
+domain is trusted to have done what*. Below it, the event stream (A2A · MCP · chain, every
+tx hash a link when the explorer is up) and the device inspector reading srl1 live.
 
 ## Rehearse cold, twice
 
-The whole point of ADR-003 and `just up`/`just down` is that the demo replays from a cold
-machine without fumbling. Run it start to finish, `just down`, and do it again.
+The whole point of ADR-003 is that the demo replays from a cold machine without fumbling:
+`containerlab deploy …`, `just console`, run the three beats, **Reset stack**, and do it
+again.

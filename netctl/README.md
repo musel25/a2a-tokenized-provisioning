@@ -17,6 +17,6 @@ uv run pytest netctl/                 # mock leg always; gnmi leg when the lab i
 uv run python -m netctl.gnmi_smoke    # three exchanges against the live router
 ```
 
-**Hands-on tour:** [`e2e/notebooks/netctl_explore.ipynb`](../e2e/notebooks/netctl_explore.ipynb) —
-one call on both provisioners, read the config off the router, watch the plateau
-appear and disappear.
+**Hands-on tour:** course chapter [`06`](../e2e/notebooks/course/06_the_hands_and_the_invariance_bet.ipynb) —
+the same gNMI calls made by hand, the config read back off the router, and the
+invariance bet experienced.

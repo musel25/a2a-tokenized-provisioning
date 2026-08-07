@@ -81,10 +81,5 @@ uv run --group demo jupyter nbconvert --to notebook --execute --stdout \
 ## Relation to the other learning surfaces
 
 - **This course** — the from-zero spine, aimed at the paper. Start here.
-- **The explore notebooks** (`e2e/notebooks/*_explore.ipynb`) — per-component tours at
-  working-engineer altitude, for after the corresponding chapter.
-- **The scratch bench** (`e2e/notebooks/scratch_inspect.ipynb`) — pre-wired imports,
-  playground-empty. Your own questions go there.
 - **The cast labs** (`contracts/EXPLORE*.md`) — the Solidity surface from a terminal.
-- **The docs route** — [`docs/LEARNING-PATH.md`](../../../docs/LEARNING-PATH.md); the
-  ADRs in `docs/adr/` are the decision boxes' primary sources.
+- **The executable paper** — [`../paper.ipynb`](../paper.ipynb): the whole system and every evaluation figure in one notebook.

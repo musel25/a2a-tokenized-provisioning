@@ -15,5 +15,6 @@ port (docs/03 §4), signs EIP-712 offers and EIP-191 activation proofs, and subm
 uv run pytest chainmcp/               # incl. Python-signs / Solidity-verifies, on live Anvil
 ```
 
-**Hands-on tour:** [`e2e/notebooks/chain_client_explore.ipynb`](../e2e/notebooks/chain_client_explore.ipynb) —
-launch a chain from a cell, sign, redeem, cheat, watch the revocation event fire.
+**Hands-on tour:** course chapters [`03`](../e2e/notebooks/course/03_the_atomic_swap.ipynb)
+and [`04`](../e2e/notebooks/course/04_signatures_that_contracts_believe.ipynb) — build the
+atomic swap and the EIP-712 signatures from zero, then drive this client against them.
