@@ -740,8 +740,11 @@ def exp_revlag_sweep(out: Path, polls=(0.1, 0.25, 0.5, 1.0, 2.0), per=6) -> list
                 info = stack.service.activate(eid, "bandwidth", ch.nonce, stack.proof(ch, eid))
                 stack.bell.revoke(eid)
                 t = perf_counter()
+                # 50 ms readback cadence, same as the lifecycle loop: SR Linux budgets
+                # gNMI at 600/min, and a 20 ms spin at poll=2.0 s spends exactly that
+                # (~100 reads × 6 trials) — the crash that taught us the number.
                 while f"a2a-{info.session_id}" in _policer_names(stack.provisioner):
-                    time.sleep(0.02)
+                    time.sleep(0.05)
                 lag = perf_counter() - t
                 samples.append({"exp": "revlag_sweep", "poll_s": poll, "run": i,
                                 "revocation_lag_s": lag})
