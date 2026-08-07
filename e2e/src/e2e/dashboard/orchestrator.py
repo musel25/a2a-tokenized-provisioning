@@ -225,7 +225,7 @@ class Console:
                 return
 
             # 2. CHAIN — settle: MCP fulfill → real on-chain tx, ticket, payment
-            emit(_stage("chain", "Payment for ticket, atomically"))
+            emit(_stage("chain", "Payment for entitlement, atomically"))
             tools = chain_tools(self.ada)
             emit(_mcp("Ada", "chainmcp", "fulfill_offer", f"approve {price} TOK + fulfill", "…",
                       expand={"server": "chainmcp (Ada's key custody)", "tool": "fulfill_offer",
@@ -236,7 +236,7 @@ class Console:
             self.sessions.setdefault(eid, None)
             block = self.ada._w3.eth.get_block("latest")
             emit(_chain_tx("fulfill", result["tx_hash"], block["number"],
-                           f"ticket #{eid} → Ada · {price} TOK → Bell · salt consumed",
+                           f"entitlement #{eid} → Ada · {price} TOK → Bell · salt consumed",
                            expand={"method": "A2ASettlement.fulfill(SignedOffer)", "from": "Ada",
                                    "tx_hash": result["tx_hash"], "block": block["number"],
                                    "effects": [f"mint ERC-721 #{eid} → Ada", f"transfer {price} TOK Ada → Bell",
@@ -272,7 +272,7 @@ class Console:
             # 4. NETWORK — enforce on the real router (or note offline)
             emit(_stage("network", "Configure the real router"))
             self._emit_enforcement(service, eid, info.session_id, emit)
-            emit(_done(True, f"{service} live — ticket #{eid}. Bell can revoke it any time."))
+            emit(_done(True, f"{service} live — entitlement #{eid}. Bell can revoke it any time."))
         except Exception as err:  # noqa: BLE001 — surface to the UI, don't crash the server
             emit(_ev("error", "controller", "Provision failed", str(err)[:200]))
 
@@ -284,7 +284,7 @@ class Console:
         eid = active[-1]
         sid = self.sessions[eid]
         try:
-            emit(_stage("chain", "Bell pulls the ticket"))
+            emit(_stage("chain", "Bell pulls the entitlement"))
             tx = self.bell.revoke(eid)
             block = self.bell._w3.eth.get_block("latest")
             emit(_chain_tx("revoke", tx, block["number"], f"Revoked(#{eid}) — flag flips on-chain",
@@ -297,7 +297,7 @@ class Console:
             emit(_stage("controller", "Watcher tears the session down"))
             self.controller.handle_revoked(eid)  # the ChainReader watcher does this live too
             emit(_ev("teardown", "controller", f"Session {sid} torn down",
-                     "revoked ticket → no authorization"))
+                     "revoked entitlement → no authorization"))
             emit(_stage("network", "Enforcement withdrawn"))
             self._emit_teardown(eid, sid, emit)
             self.sessions[eid] = None
@@ -585,7 +585,7 @@ def _chain_tx(method: str, tx_hash: str, block: int, summary: str, break_signal:
 
 def _ticket(view: dict) -> dict:
     return {"kind": "ticket", "domain": "chain", "state": view,
-            "title": f"ticket #{view['id']}", "detail": view["name"], "t": _now_ms()}
+            "title": f"entitlement #{view['id']}", "detail": view["name"], "t": _now_ms()}
 
 
 def _chain_read(what: str, value: str) -> dict:

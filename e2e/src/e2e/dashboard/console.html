@@ -123,6 +123,10 @@
   .station .badge{position:absolute; top:12px; right:12px; font-size:9.5px; letter-spacing:.1em; text-transform:uppercase;
     color:var(--faint)}
   .station.active .badge{color:var(--c)}
+  .station .reqs{display:flex; gap:5px; margin:-4px 0 8px}
+  .rq{font-size:9px; letter-spacing:.08em; color:var(--muted); border:1px solid var(--line-2);
+    border-radius:5px; padding:1px 5px; cursor:help}
+  .rq:hover{color:var(--c); border-color:var(--c)}
   .conn{width:46px; align-self:center; height:3px; position:relative; margin:0 -1px; flex:0 0 46px}
   .conn::before{content:""; position:absolute; inset:0; background:var(--line-2); border-radius:2px}
   .conn.flow::after{content:""; position:absolute; inset:0; border-radius:2px;
@@ -144,6 +148,7 @@
   .ev .body .t{font-size:12px; color:var(--text)}
   .ev .body .d{font-size:10.5px; color:var(--muted); word-break:break-word}
   .ev.k-a2a{border-left-color:var(--agent)} .ev.k-a2a .tag{color:var(--agent)}
+  .ev.k-admit{border-left-color:var(--agent)} .ev.k-admit .tag{color:var(--agent)}
   .ev.k-mcp{border-left-color:var(--agent)} .ev.k-mcp .tag{color:color-mix(in oklab,var(--agent) 70%, #fff 30%)}
   .ev.k-decision{border-left-color:var(--agent); background:rgba(139,123,240,.06)}
   .ev.k-thinking{border-left-color:var(--agent); opacity:.85} .ev.k-thinking .tag{color:var(--agent)}
@@ -205,7 +210,7 @@
     background:linear-gradient(90deg,rgba(79,217,138,.35),var(--network))}
   .gauge .fill.shaped{background:linear-gradient(90deg,rgba(224,169,59,.3),var(--chain))}
   .gauge .limit{position:absolute; top:-3px; bottom:-3px; width:2px; background:var(--revoke); left:50%; opacity:.8}
-  .gauge .limit::after{content:"ticket 50"; position:absolute; top:-16px; left:-24px; font-size:9px; color:var(--revoke); white-space:nowrap}
+  .gauge .limit::after{content:"entitled 50"; position:absolute; top:-16px; left:-28px; font-size:9px; color:var(--revoke); white-space:nowrap}
   .gauge .val{position:absolute; right:8px; top:50%; transform:translateY(-50%); font-size:12px; color:var(--text)}
   .idle{color:var(--faint); font-size:11px; text-align:center; padding:24px 0}
   .offline{color:var(--chain); font-size:11px; border:1px dashed rgba(224,169,59,.4); border-radius:9px; padding:10px; margin-top:10px}
@@ -218,7 +223,7 @@
   <header>
     <div>
       <h1>a2a <span class="dot">·</span> tokenized provisioning</h1>
-      <div class="sub">agents buy network services from each other — payment is a ticket, a ticket is enforcement</div>
+      <div class="sub">agents buy network services from each other — settlement mints an entitlement; the seller's own router honors it <span style="color:var(--faint)">· the paper's Fig.&nbsp;1, in motion</span></div>
     </div>
     <div class="pills">
       <span class="pill"><span class="led" id="led-anvil"></span>chain</span>
@@ -254,15 +259,15 @@
 
     <div class="card sidecol">
       <div>
-        <h2>Your ticket — the NFT</h2>
-        <div id="nft"><div class="nft-empty">No ticket yet. Ask Ada to buy a service; the ERC-721 she receives appears here.</div></div>
+        <h2>Your entitlement — the ERC-721</h2>
+        <div id="nft"><div class="nft-empty">No entitlement yet. Ask Ada to buy a service; the token she receives appears here — terms in contract storage, no external host.</div></div>
       </div>
       <div style="margin-top:14px">
-        <h2>Bell's kill switch</h2>
+        <h2>Bell's kill switch — step 6</h2>
         <div class="state" style="color:var(--muted); font-size:11px; min-height:34px" id="revoke-state">
-          Buy a service, then Bell (the issuer) can revoke the NFT above.
+          Buy a service, then Bell (the issuer) can revoke the entitlement above.
         </div>
-        <button class="btn" id="revoke" disabled>Revoke ticket ✕</button>
+        <button class="btn" id="revoke" disabled>Revoke entitlement ✕</button>
         <button class="btn ghost" id="reset" style="margin-top:8px">Reset stack</button>
       </div>
     </div>
@@ -270,29 +275,33 @@
 
   <section class="relay-wrap">
     <div class="relay-title"><span class="k">the trust relay</span>
-      <span class="n">what Ada bought crosses four trust domains — watch who does what</span></div>
+      <span class="n">the workflow's six steps cross four trust domains — watch who does what</span></div>
     <div class="relay" id="relay">
       <div class="station" data-d="agent" id="st-agent">
-        <span class="badge">judgment</span><div class="glyph">◆</div>
+        <span class="badge">1–2 · judgment</span><div class="glyph">◆</div>
         <div class="name">Agents</div><div class="who">Ada · Bell — the only LLMs</div>
+        <div class="reqs"><span class="rq" title="R6 service invariance — what is sold enters the agent layer only through a catalogue row (demand, list price, params codec)">R6</span></div>
         <div class="state" id="stt-agent"><span class="sm">idle</span></div>
       </div>
       <div class="conn" id="c1"></div>
       <div class="station" data-d="chain" id="st-chain">
-        <span class="badge">settlement</span><div class="glyph">◈</div>
-        <div class="name">Chain</div><div class="who">Anvil · ERC-721 ticket</div>
+        <span class="badge">3 · settlement</span><div class="glyph">◈</div>
+        <div class="name">Chain</div><div class="who">Anvil · ERC-721 entitlement</div>
+        <div class="reqs"><span class="rq" title="R1 atomic settlement — payment and entitlement move in one fulfill, or not at all">R1</span><span class="rq" title="R2 self-contained terms — what was bought lives in contract storage; even tokenURI is on-chain">R2</span></div>
         <div class="state" id="stt-chain"><span class="sm">idle</span></div>
       </div>
       <div class="conn" id="c2"></div>
       <div class="station" data-d="controller" id="st-controller">
-        <span class="badge">authority</span><div class="glyph">▚</div>
+        <span class="badge">4 · authority</span><div class="glyph">▚</div>
         <div class="name">Controller</div><div class="who">deterministic · no LLM</div>
+        <div class="reqs"><span class="rq" title="R3 deterministic authorization — challenge–response, then the six-check predicate over fresh chain facts">R3</span><span class="rq" title="R5 key confinement — the controller is built on a keyless chain reader; it could not sign even if instructed">R5</span></div>
         <div class="state" id="stt-controller"><span class="sm">idle</span></div>
       </div>
       <div class="conn" id="c3"></div>
       <div class="station" data-d="network" id="st-network">
-        <span class="badge">enforcement</span><div class="glyph">≋</div>
+        <span class="badge">5–6 · enforcement</span><div class="glyph">≋</div>
         <div class="name">Network</div><div class="who">SR Linux srl1 · gNMI</div>
+        <div class="reqs"><span class="rq" title="R4 unilateral termination — expiry and revocation deconfigure the device; teardown removes exactly what enforcement installed">R4</span><span class="rq" title="R6 service invariance — one translator per service is the only component that knows what was sold">R6</span></div>
         <div class="state" id="stt-network"><span class="sm">idle</span></div>
       </div>
     </div>
@@ -308,6 +317,11 @@
       <div id="insp-body"><div class="idle">No enforcement yet.</div></div>
     </div>
   </section>
+
+  <footer style="margin-top:16px; color:var(--faint); font-size:10.5px; letter-spacing:.04em">
+    companion artifacts — <code>e2e/notebooks/paper.ipynb</code> the paper, executable ·
+    <code>docs/09-evaluation.md</code> every number · <code>just eval</code> reproduce the dataset
+  </footer>
 </div>
 
 <script>
@@ -364,7 +378,7 @@ function resetRelay(){
     $('#stt-'+d).innerHTML='<span class="sm">idle</span>'; });
   conns.forEach(c=>{ const el=$('#'+c); el.className='conn'; });
   $('#stream').innerHTML=''; $('#insp-body').innerHTML='<div class="idle">No enforcement yet.</div>';
-  $('#nft').innerHTML='<div class="nft-empty">No ticket yet. Ask Ada to buy a service; the ERC-721 she receives appears here.</div>';
+  $('#nft').innerHTML='<div class="nft-empty">No entitlement yet. Ask Ada to buy a service; the token she receives appears here — terms in contract storage, no external host.</div>';
 }
 function stage(domain){
   const i = order.indexOf(domain);
@@ -389,7 +403,7 @@ function cutRelay(){ // the revocation break at the chain, propagating right
 function addEv(e){
   const s=$('#stream'); if(s.querySelector('.idle')) s.innerHTML='';
   const div=document.createElement('div'); div.className='ev k-'+e.kind;
-  const tag = ({a2a:'a2a',mcp:'mcp',decision:'judge',chain_tx:'chain',chain_read:'read',
+  const tag = ({a2a:'a2a',admit:'admit',mcp:'mcp',decision:'judge',chain_tx:'chain',chain_read:'read',
     predicate:'check',session:'ctrl',teardown:'ctrl',device:'dev',iperf:'iperf',done:'done',
     error:'error',stage:'—',boot:'boot',thinking:'llm'})[e.kind] || e.kind;
   let detail = e.detail||'';
@@ -462,7 +476,7 @@ function renderDevice(state){
       <div class="kv"><span class="m">dial-out dest</span><b>${on? state.destination : '<span style="color:var(--faint)">none</span>'}</b></div>
       <div class="kv"><span class="m">collector</span><b>${on? state.collector : '—'}</b></div>
       <div class="kv"><span class="m">sensor path</span><b style="font-size:10px">${state.path||''}</b></div>
-      ${on?`<div style="margin-top:12px; color:var(--muted); font-size:10.5px; line-height:1.6"><span style="color:var(--faint)">the ticket's right, exercised →</span> the controller wrote a <code>grpc-tunnel destination</code> to srl1. Read straight off the router.</div>`:''}`;
+      ${on?`<div style="margin-top:12px; color:var(--muted); font-size:10.5px; line-height:1.6"><span style="color:var(--faint)">the entitlement's right, exercised →</span> the controller wrote a <code>grpc-tunnel destination</code> to srl1. Read straight off the router.</div>`:''}`;
     return;
   }
   const pol = (state.policers&&state.policers[0]);
@@ -484,7 +498,7 @@ function renderIperf(e){
 
 // SSE dispatch
 function dispatch(e){
-  if(['stage','a2a','mcp','decision','chain_tx','chain_read','predicate','session','teardown','device','iperf','done','error','boot','thinking'].includes(e.kind))
+  if(['stage','a2a','admit','mcp','decision','chain_tx','chain_read','predicate','session','teardown','device','iperf','done','error','boot','thinking'].includes(e.kind))
     if(e.kind!=='boot') addEv(e);
 
   switch(e.kind){
@@ -494,6 +508,7 @@ function dispatch(e){
       if(e.title && e.title.toLowerCase().includes('pulls')) cutRelay(); else stage(e.domain);
       running = true; $('#send').disabled = true; break;
     case 'a2a': setStation('agent', e.frm+' → '+e.to, e.skill); break;
+    case 'admit': setStation('agent', 'admission: arithmetic ✓', e.detail.split(' · ')[1]||''); break;
     case 'decision': setStation('agent', e.accept?'accept ✓':'decline ✗', e.detail); break;
     case 'chain_tx':
       setStation('chain', e.method, `${e.tx_hash?e.tx_hash.slice(0,14)+'…':''} · block ${e.block}`);
@@ -502,7 +517,7 @@ function dispatch(e){
     case 'predicate':
       setStation('controller', e.title, ''); break;
     case 'session': setStation('controller', 'authorized', e.detail);
-      $('#revoke').disabled=false; $('#revoke-state').innerHTML='Ticket live. Bell can pull it now — <b style="color:var(--revoke)">the enforcement is downstream of the chain.</b>';
+      $('#revoke').disabled=false; $('#revoke-state').innerHTML='Entitlement live. Bell can pull it now — <b style="color:var(--revoke)">enforcement is downstream of the chain.</b>';
       break;
     case 'teardown': setStation('controller', 'torn down', e.detail);
       $('#revoke').disabled=true; break;
