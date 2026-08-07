@@ -54,7 +54,7 @@ def test_agent_buys_via_tools_mints_on_anvil(anvil):
         provider_graph = build_provider_graph(
             _StubLLM(QuoteDecision(quote=True, price_tok=10, reason="fair")),
             ChainProviderTools(bell),
-            CapacityLedger(capacity_bps=100_000_000),
+            CapacityLedger(capacity=100_000_000),
         )
         need = bandwidth_need_for(50_000_000)
         offer = provider_graph.invoke(ProviderState(need=need))["result"]
@@ -72,6 +72,56 @@ def test_agent_buys_via_tools_mints_on_anvil(anvil):
         assert ada.tok_balance(bell.address) == 10 * 10**18  # Bell paid, via tools
         view = ada.get(entitlement_id)
         assert view.issuer == bell.address and view.params.capacity_bps == 50_000_000
+    finally:
+        bell.close()
+        ada.close()
+
+
+def test_agent_buys_telemetry_via_tools_mints_on_anvil(anvil):
+    """The same tools, the other product: the offer derives service type, resource,
+    and params from the NEED via the catalogue — nothing in the tool is bandwidth's."""
+    from a2a_interfaces.fixtures import TELEMETRY_NEED
+
+    bell = ChainClient(anvil.rpc_url, ANVIL_KEYS["bell"], deployment=anvil.deployment)
+    ada = ChainClient(anvil.rpc_url, ANVIL_KEYS["ada"], deployment=anvil.deployment)
+    try:
+        ada.faucet(100 * 10**18)
+        provider_graph = build_provider_graph(
+            None,  # deterministic slot: telemetry lists at 8 TOK
+            ChainProviderTools(bell),
+            CapacityLedger(capacity=8),
+        )
+        offer = provider_graph.invoke(ProviderState(need=TELEMETRY_NEED))["result"]
+        assert isinstance(offer, SignedOffer)
+        assert offer.offer.service_type == 1
+        assert offer.offer.price == str(8 * 10**18)
+
+        entitlement_id = ChainConsumerTools(ada, controller_url="http://unused").settle(offer)
+        view = ada.get(entitlement_id)
+        assert view.service_type == 1
+        assert view.params.collector_endpoint == TELEMETRY_NEED.collector_endpoint
+        assert view.params.sensor_paths == TELEMETRY_NEED.sensor_paths
+    finally:
+        bell.close()
+        ada.close()
+
+
+def test_two_offers_hash_to_distinct_digests(anvil):
+    """Fresh salt per sign_offer: otherwise-identical quotes must both be fulfillable
+    (the contract burns each digest once — same salt would revert OfferAlreadyUsed)."""
+    bell = ChainClient(anvil.rpc_url, ANVIL_KEYS["bell"], deployment=anvil.deployment)
+    ada = ChainClient(anvil.rpc_url, ANVIL_KEYS["ada"], deployment=anvil.deployment)
+    try:
+        ada.faucet(100 * 10**18)
+        tools = ChainProviderTools(bell)
+        need = bandwidth_need_for(50_000_000)
+        first = tools.sign_offer(need, 10)
+        second = tools.sign_offer(need, 10)
+        assert first.offer.salt != second.offer.salt
+        consumer = ChainConsumerTools(ada, controller_url="http://unused")
+        eid1 = consumer.settle(first)
+        eid2 = consumer.settle(second)  # would revert with a reused digest
+        assert eid1 != eid2
     finally:
         bell.close()
         ada.close()

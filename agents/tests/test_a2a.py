@@ -12,21 +12,53 @@ from pathlib import Path
 import pytest
 
 from a2a_interfaces import Decline, SignedOffer
-from a2a_interfaces.fixtures import BANDWIDTH_NEED, CANONICAL_SIGNED_OFFER
+from a2a_interfaces.fixtures import BANDWIDTH_NEED, CANONICAL_SIGNED_OFFER, TELEMETRY_NEED
 
 from agents.a2a_adapter import (
     decode_need,
     decode_offer_or_decline,
     encode_need,
     encode_offer_or_decline,
+    loopback_quote,
     provider_card,
+    provider_cards,
 )
+from agents.provider_graph import CapacityLedger, build_provider_graph
 
 
 def test_provider_card_has_the_quote_skill():
     card = provider_card("bandwidth-provider", "http://localhost:9101/", "bandwidth")
     assert card.url == "http://localhost:9101/"
     assert [s.id for s in card.skills] == ["quote_bandwidth"]
+
+
+def test_both_provider_cards_exist():
+    """The provider publishes a card per product — the telemetry card is not a
+    hypothetical: it is built by the same parameterized constructor."""
+    cards = provider_cards()
+    assert [s.id for c in cards for s in c.skills] == ["quote_bandwidth", "quote_telemetry"]
+
+
+class _CannedSignTool:
+    def sign_offer(self, need, price_tok):
+        return CANONICAL_SIGNED_OFFER
+
+
+def test_loopback_quote_round_trips_the_codec_for_both_services():
+    """The evaluated A2A hop: need and answer cross the real JSON codec; the provider
+    graph runs in between; per-node timings come back for the harness."""
+    for need in (BANDWIDTH_NEED, TELEMETRY_NEED):
+        graph = build_provider_graph(None, _CannedSignTool(), CapacityLedger(capacity=10**12))
+        result, timings = loopback_quote(graph, need)
+        assert isinstance(result, SignedOffer)
+        assert set(timings) >= {"admit_s", "quote_s"}
+
+
+def test_loopback_quote_carries_a_decline():
+    graph = build_provider_graph(None, _CannedSignTool(), CapacityLedger(capacity=0))
+    result, timings = loopback_quote(graph, BANDWIDTH_NEED)
+    assert isinstance(result, Decline)
+    assert "admit_s" in timings and "quote_s" not in timings  # declined before pricing
 
 
 def test_need_round_trips_over_the_wire():

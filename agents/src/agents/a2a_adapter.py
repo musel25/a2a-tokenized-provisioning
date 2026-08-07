@@ -15,11 +15,14 @@ contract's `fulfill` (`BadSignature`, M1.3) — the wire needs no trust of its o
 from __future__ import annotations
 
 import json
+from time import perf_counter
 
 from a2a.types import AgentCapabilities, AgentCard, AgentSkill
 
 from a2a_interfaces import Decline, ServiceNeed, SignedOffer
 from a2a_interfaces.models import BandwidthNeed, TelemetryNeed
+
+from .provider_graph import ProviderState
 
 _JSON = ["application/json"]
 
@@ -69,3 +72,39 @@ def decode_offer_or_decline(payload: str) -> SignedOffer | Decline:
     if data.get("declined"):
         return Decline.model_validate(data)
     return SignedOffer.model_validate(data)
+
+
+def provider_cards() -> list[AgentCard]:
+    """Both products' cards, one quote skill each (docs/03 §1.1) — what a consumer
+    discovers before step 1. Discovery binds nothing: every downstream check binds to
+    the addresses inside the signed offer, not to how the provider was found."""
+    return [
+        provider_card("bandwidth-provider", "http://localhost:9101/", "bandwidth"),
+        provider_card("telemetry-provider", "http://localhost:9102/", "telemetry"),
+    ]
+
+
+def loopback_quote(provider_graph, need: ServiceNeed) -> tuple[SignedOffer | Decline, dict[str, float]]:
+    """One quote exchange with no live server: the need and the answer cross the SAME
+    JSON codec a served A2A data part would carry, and the provider graph runs for
+    real in between. This is the evaluated configuration's A2A hop — schema-level by
+    design (docs/09 boundary: no message envelope is assembled, no transport is
+    exercised); a served deployment swaps this function for the SDK client/server pair.
+
+    Returns the decoded answer plus per-node wall times ({"admit_s", "quote_s"}), so
+    the harness can split admission arithmetic from the judgment slot."""
+    wire_need = encode_need(need)
+    timings: dict[str, float] = {}
+    final: dict = {}
+    t_prev = perf_counter()
+    for chunk in provider_graph.stream(
+        ProviderState(need=decode_need(wire_need)), stream_mode="updates"
+    ):
+        node, delta = next(iter(chunk.items()))
+        now = perf_counter()
+        timings[f"{node}_s"] = now - t_prev
+        t_prev = now
+        if delta is not None:
+            final.update(delta if isinstance(delta, dict) else vars(delta))
+    wire_answer = encode_offer_or_decline(final["result"])
+    return decode_offer_or_decline(wire_answer), timings
