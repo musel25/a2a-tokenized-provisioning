@@ -51,9 +51,14 @@ and `failed` are terminal (re-teardown is absorbed, rule 8).
 ## 4. Challenge–response auth (M4.2)
 
 Per docs/03 §3.2: nonce issued per challenge (single-use, expiry vs **chain time**),
-proof = EIP-191 signature over `a2a-activate|{controller_id}|{nonce}|{entitlement_id}|{expires_at}`,
-recovered address must equal `ownerOf(entitlement_id)`. Replay → `E_NONCE_REUSED`;
-stale → `E_BAD_PROOF`; wrong signer → `E_NOT_OWNER`… exact mapping pinned by tests.
+proof = EIP-191 signature over `a2a-{action}|{controller_id}|{nonce}|{entitlement_id}|{expires_at}`
+with `action` in {`activate`, `teardown`}, recovered address must equal
+`ownerOf(entitlement_id)`. Replay → `E_NONCE_REUSED`; stale → `E_BAD_PROOF`; wrong signer
+→ `E_NOT_OWNER`… exact mapping pinned by tests.
+
+`ControllerService.teardown_requested` is the proof-carrying entry point (the HTTP surface);
+`teardown` itself takes no proof because its callers are the expiry timer and the Revoked
+watcher — the controller acting on chain state, not a request from outside.
 
 ## 5. Translators (M4.3)
 

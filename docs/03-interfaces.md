@@ -219,8 +219,10 @@ POST /v0/activate           { "entitlement_id": 7, "action": { "kind": "bandwidt
   → 200 { "session_id": "ent7-a1", "state": "active", "expires_at": 1757952000 }
   → 4xx { "error": "E_..." }            // codes in §3.4
 
-POST /v0/teardown           { "session_id": "ent7-a1" }      // idempotent
-  → 200 { "state": "torn_down" }
+POST /v0/teardown           { "session_id": "ent7-a1",       // idempotent
+                              "proof": { "nonce": "0x...", "signature": "0x..." } }
+  → 200 { "state": "torn_down" }        // also for an unknown id (rule 8), and that
+  → 4xx { "error": "E_..." }            // path touches no device
 
 GET  /v0/sessions/{id}
   → 200 { "session_id": "...", "entitlement_id": 7, "state": "active",
@@ -232,11 +234,19 @@ GET  /v0/sessions/{id}
 Message string, signed by the entitlement's current owner:
 
 ```
-a2a-activate|{controller_id}|{nonce}|{entitlement_id}|{expires_at}
+a2a-{action}|{controller_id}|{nonce}|{entitlement_id}|{expires_at}
 ```
+
+`action` is `activate` or `teardown` — ending a session is an authorized act, not a public
+one, and session ids are formulaic (`ent7-a1`). Because the verb is inside the signed
+string, a captured activation proof is not a teardown authorization. Both verbs draw their
+nonce from the same `POST /v0/challenge`.
 
 Controller verifies: signature recovers to `ownerOf(entitlement_id)` **and** nonce is fresh
 (single-use, controller-local store) **and** `expires_at` not passed (chain time).
+
+The two *autonomous* teardown paths (§3.3) carry no proof and need none: their caller is
+the controller itself, acting on chain state it has just read.
 
 ### 3.3 Session states
 

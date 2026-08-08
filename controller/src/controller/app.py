@@ -60,7 +60,10 @@ def build_app(service: ControllerService) -> FastAPI:
 
     @app.post("/v0/teardown")
     def teardown(body: TeardownRequest):
-        return {"state": service.teardown(body.session_id).state.value}
+        state = service.teardown_requested(
+            body.session_id, body.proof.nonce, body.proof.signature
+        ).state
+        return {"state": state.value}
 
     @app.get("/v0/sessions/{session_id}")
     def session(session_id: str):

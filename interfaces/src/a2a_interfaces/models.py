@@ -225,8 +225,12 @@ class SessionInfo(_Frozen):
 
 
 class TeardownRequest(_Frozen):
+    """Ending a session is an authorized act: the proof binds the caller to the owner of
+    the session's entitlement, over an `a2a-teardown|…` string (docs/03 §3.2)."""
+
     v: Literal[0] = 0
     session_id: str
+    proof: ProofPayload
 
 
 # --- Dashboard events (§8) — components append; the dashboard tails ---------
