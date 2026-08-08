@@ -9,6 +9,7 @@ from a2a_interfaces import Decline, SignedOffer
 from a2a_interfaces.fixtures import CANONICAL_SIGNED_OFFER, TELEMETRY_NEED, WINDOW
 
 from agents.provider_graph import (
+    QUOTE_HOLD_S,
     QUOTE_SYSTEM,
     CapacityLedger,
     ProviderState,
@@ -77,6 +78,42 @@ def test_capacity_ledger_is_all_or_nothing():
     assert ledger.try_reserve((0, 10), 60) is True
     assert ledger.try_reserve((0, 10), 60) is False  # would oversell
     assert ledger.available((0, 10)) == 40  # unchanged by the failed reserve
+
+
+def test_holds_expire_so_quoting_without_accepting_cannot_drain_the_pool():
+    """Admission reserves before the price is known, and a consumer may never accept.
+    Without an expiry, asking for quotes was enough to exhaust the pool for free."""
+    now = [1000]
+    ledger = CapacityLedger(capacity=100, clock=lambda: now[0])
+
+    assert ledger.try_reserve((0, 10), 100) is True
+    assert ledger.try_reserve((0, 10), 100) is False  # first hold is still live
+
+    now[0] += QUOTE_HOLD_S + 1  # the quote went stale, unaccepted
+    assert ledger.available((0, 10)) == 100
+    assert ledger.try_reserve((0, 10), 100) is True
+
+
+def test_a_signed_offer_holds_capacity_until_the_offer_expires():
+    """Once signed, the hold tracks the offer the buyer is actually holding — longer
+    than the default quote hold, and no longer."""
+    now = [1000]
+    ledger = CapacityLedger(capacity=100, clock=lambda: now[0])
+    ledger.try_reserve((0, 10), 100)
+    ledger.hold_until((0, 10), 100, expires_at=now[0] + QUOTE_HOLD_S * 4)
+
+    now[0] += QUOTE_HOLD_S + 1  # past the default hold, still inside offer validity
+    assert ledger.available((0, 10)) == 0
+
+    now[0] += QUOTE_HOLD_S * 4
+    assert ledger.available((0, 10)) == 100  # offer lapsed, capacity back on the market
+
+
+def test_a_ledger_without_a_clock_never_expires_a_hold():
+    """The unit-test and det-condition behaviour, unchanged: no clock, no expiry."""
+    ledger = CapacityLedger(capacity=100)
+    assert ledger.try_reserve((0, 10), 100) is True
+    assert ledger.available((0, 10)) == 0
 
 
 def test_deterministic_slot_quotes_the_list_price():
