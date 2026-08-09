@@ -80,6 +80,10 @@ uv run --group demo jupyter nbconvert --to notebook --execute --stdout \
 
 ## Relation to the other learning surfaces
 
-- **This course** — the from-zero spine, aimed at the paper. Start here.
+- **[`../TUTORIAL.ipynb`](../TUTORIAL.ipynb)** — the whole project in one notebook, for a
+  reader with no background at all. Same method (rebuild → reveal → claim), one sitting,
+  nine acts instead of ten chapters. Read it first if you are new; this course is the
+  deeper pass, one layer per notebook.
+- **This course** — the from-zero spine, aimed at the paper.
 - **The cast labs** (`contracts/EXPLORE*.md`) — the Solidity surface from a terminal.
 - **The executable paper** — [`../paper.ipynb`](../paper.ipynb): the whole system and every evaluation figure in one notebook.

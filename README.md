@@ -11,10 +11,14 @@ The running example: Ada (a consumer agent) buys 50 Mbps on path A→B from Bell
 agent) for 10 TOK; one atomic transaction mints entitlement **#7** to Ada, and a
 deterministic controller honors it by shaping the router — no human, no prior trust.
 
-> **New here and want to learn the whole thing?** Work through the course notebooks
-> ([`e2e/notebooks/course/`](e2e/notebooks/course/) — each chapter rebuilds one layer
-> from zero), then run [`e2e/notebooks/paper.ipynb`](e2e/notebooks/paper.ipynb) — the
-> paper as one executable notebook: a live lifecycle plus every evaluation figure.
+> **New here and want to learn the whole thing?** Start with
+> [`e2e/notebooks/TUTORIAL.ipynb`](e2e/notebooks/TUTORIAL.ipynb) — the whole project in
+> one sitting, assuming no blockchain, networking, or agent background: you rebuild every
+> layer in plain Python by running the attack each piece exists to stop, then run the real
+> component. Go deeper per layer in the course notebooks
+> ([`e2e/notebooks/course/`](e2e/notebooks/course/)), then run
+> [`e2e/notebooks/paper.ipynb`](e2e/notebooks/paper.ipynb) — the paper as one executable
+> notebook: a live lifecycle plus every evaluation figure.
 
 ## Read first, in order
 
