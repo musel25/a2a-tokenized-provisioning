@@ -20,6 +20,7 @@ can't" (ledger) or "I won't at that price" (judgment) — and only the second is
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Protocol
@@ -58,6 +59,12 @@ class CapacityLedger:
     `offer.validUntil` once signed, and `QUOTE_HOLD_S` before that. Expired holds are
     swept lazily, on the next read, so the ledger still needs no thread of its own.
 
+    Every mutating path takes `_lock`. `try_reserve` is a read (`available`) followed
+    by a write (`_holds.append`), so without it two concurrent admissions could both
+    see the same free capacity and both take it — the check-then-act race that makes
+    "no overselling" a sequential-only guarantee. The lock makes admission correct
+    under simultaneous requests, not merely one at a time.
+
     `clock` supplies chain time (ADR-004 — never the wall clock). Without one the ledger
     keeps its original never-expire behaviour, which is what the unit tests exercise.
     """
@@ -66,6 +73,8 @@ class CapacityLedger:
         self._capacity = capacity
         self._clock = clock
         self._holds: dict[tuple[int, int], list[_Hold]] = {}
+        # Reentrant: `try_reserve` calls `available`, which takes it again.
+        self._lock = threading.RLock()
 
     def _sweep(self, window: tuple[int, int]) -> list[_Hold]:
         holds = self._holds.setdefault(window, [])
@@ -75,39 +84,47 @@ class CapacityLedger:
         return holds
 
     def reserved(self, window: tuple[int, int]) -> int:
-        return sum(h.units for h in self._sweep(window))
+        with self._lock:
+            return sum(h.units for h in self._sweep(window))
 
     def available(self, window: tuple[int, int]) -> int:
-        return self._capacity - self.reserved(window)
+        with self._lock:
+            return self._capacity - self.reserved(window)
 
     def try_reserve(self, window: tuple[int, int], units: int) -> bool:
         """Reserve `units` in `window` if they fit; else leave the ledger untouched and
-        return False. All-or-nothing, so a rejected reservation oversells nothing."""
-        if units > self.available(window):
-            return False
-        expires_at = None if self._clock is None else self._clock() + QUOTE_HOLD_S
-        self._holds[window].append(_Hold(units=units, expires_at=expires_at))
-        return True
+        return False. All-or-nothing, so a rejected reservation oversells nothing.
+
+        Check and act are one critical section: concurrent callers are serialized, so
+        two admissions cannot both fit into capacity only one of them has."""
+        with self._lock:
+            if units > self.available(window):
+                return False
+            expires_at = None if self._clock is None else self._clock() + QUOTE_HOLD_S
+            self._holds[window].append(_Hold(units=units, expires_at=expires_at))
+            return True
 
     def hold_until(self, window: tuple[int, int], units: int, expires_at: int) -> None:
         """Re-stamp the most recent matching hold to the signed offer's validUntil, so
         the capacity comes back exactly when the offer the buyer holds goes stale."""
-        for hold in reversed(self._sweep(window)):
-            if hold.units == units:
-                hold.expires_at = expires_at
-                return
+        with self._lock:
+            for hold in reversed(self._sweep(window)):
+                if hold.units == units:
+                    hold.expires_at = expires_at
+                    return
 
     def release(self, window: tuple[int, int], units: int) -> None:
         """Give `units` back now (an explicit decline). Oldest hold first."""
-        remaining = units
-        holds = self._sweep(window)
-        while remaining > 0 and holds:
-            head = holds[0]
-            if head.units > remaining:
-                head.units -= remaining
-                return
-            remaining -= head.units
-            holds.pop(0)
+        with self._lock:
+            remaining = units
+            holds = self._sweep(window)
+            while remaining > 0 and holds:
+                head = holds[0]
+                if head.units > remaining:
+                    head.units -= remaining
+                    return
+                remaining -= head.units
+                holds.pop(0)
 
 
 class QuoteDecision(BaseModel):

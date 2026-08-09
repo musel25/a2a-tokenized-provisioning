@@ -80,6 +80,44 @@ def test_capacity_ledger_is_all_or_nothing():
     assert ledger.available((0, 10)) == 40  # unchanged by the failed reserve
 
 
+def test_concurrent_admissions_cannot_oversell_one_slot():
+    """The check-then-act race: `try_reserve` reads `available` and then appends, so
+    two threads can both see the same free capacity and both take it.
+
+    The window between the read and the append is a few bytecodes wide, so under the
+    GIL it almost never loses the interpreter — a plain thread race passes with or
+    without the lock and proves nothing. The clock widens it honestly: `_sweep` calls
+    it on every read, so a clock that sleeps yields the GIL *inside* the critical
+    section, exactly where a slower real ledger (an RPC, a database) would. Eight
+    threads then race for a pool with room for one; exactly one must win."""
+    import threading
+    import time
+
+    def slow_chain_time() -> int:
+        time.sleep(0.005)  # a yield point between the check and the act
+        return 1000
+
+    ledger = CapacityLedger(capacity=1, clock=slow_chain_time)
+    start = threading.Barrier(8)
+    wins: list[bool] = []
+    record = threading.Lock()
+
+    def contend() -> None:
+        start.wait()  # release every thread into try_reserve together
+        got = ledger.try_reserve((0, 10), 1)
+        with record:
+            wins.append(got)
+
+    threads = [threading.Thread(target=contend) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert sum(wins) == 1, f"{sum(wins)} admissions fit into capacity for one"
+    assert ledger.available((0, 10)) == 0
+
+
 def test_holds_expire_so_quoting_without_accepting_cannot_drain_the_pool():
     """Admission reserves before the price is known, and a consumer may never accept.
     Without an expiry, asking for quotes was enough to exhaust the pool for free."""

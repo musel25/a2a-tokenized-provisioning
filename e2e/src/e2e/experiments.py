@@ -243,6 +243,30 @@ def _policer_names(prov: TimingProvisioner) -> set[str]:
     return names
 
 
+def _policer_attachments(prov: TimingProvisioner) -> set[str]:
+    """Which policer templates are actually ATTACHED to an interface.
+
+    `_policer_names` reads the template; this reads the binding that makes it act on
+    traffic. Both go down in one gNMI Set, so an ok result implies both landed — but
+    "committed and read back" should mean the thing that enforces was read back, not
+    just the thing that describes it."""
+    client = prov.inner._client("srl1")
+    got = client.get(path=["/qos/interfaces"], encoding="json_ietf", datatype="config")
+    names = set()
+    for update in got["notification"][0].get("update") or []:
+        for iface in _denamespace(update["val"] or {}).get("interface", []):
+            tmpl = (iface.get("input", {})
+                    .get("policer-templates", {}).get("policer-template"))
+            if tmpl:
+                names.add(tmpl)
+    return names
+
+
+def _bandwidth_names(prov: TimingProvisioner) -> set[str]:
+    """A bandwidth session counts as present only if template AND attachment are."""
+    return _policer_names(prov) & _policer_attachments(prov)
+
+
 def _telemetry_names(prov: TimingProvisioner) -> set[str]:
     return {d["name"] for d in prov.inner.telemetry_config("srl1")}
 
@@ -328,8 +352,9 @@ def run_lifecycle(stack: Stack, service: str, mode: str, llm, budget_tok: int = 
     except Exception:  # noqa: BLE001 — approve gas is contextual, not load-bearing
         pass
 
-    # 5. verify — the config is ON the device (read back over gNMI)
-    names = _policer_names if service == "bandwidth" else _telemetry_names
+    # 5. verify — the config is ON the device (read back over gNMI): for bandwidth,
+    #    both the policer template and its ingress attachment
+    names = _bandwidth_names if service == "bandwidth" else _telemetry_names
     t0 = perf_counter()
     present = f"a2a-{session_id}" in names(stack.provisioner)
     phases["verify_readback_s"] = perf_counter() - t0
