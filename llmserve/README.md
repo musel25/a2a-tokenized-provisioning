@@ -9,15 +9,21 @@ interactive speed (the local box takes ~140 s/decision; this takes ~1–2 s warm
 ## One-time setup
 
 ```sh
-uv run modal setup                                   # browser auth (once per machine)
+uv run --group llm modal setup        # browser auth (once per machine)
 TOKEN=$(openssl rand -hex 16)
-uv run modal secret create a2a-llm-key LLM_API_KEY=$TOKEN
+uv run --group llm modal secret create a2a-llm-key LLM_API_KEY=$TOKEN
 ```
+
+`modal` sits in the `llm` dependency group, outside the default sync — hence `--group llm`
+on every command here. Omit it on a workspace that has never synced the group and
+`modal_llm.py` dies with `ModuleNotFoundError: No module named 'modal'`. That error means
+*sync the group*; it has never meant the module's `import modal` is spurious (every
+`@app.function` / `modal.Image` / `modal.Volume` in the file needs it).
 
 ## Deploy (and redeploy after edits)
 
 ```sh
-uv run modal deploy llmserve/modal_llm.py
+uv run --group llm modal deploy llmserve/modal_llm.py
 # → https://<workspace>--a2a-llm-serve.modal.run
 ```
 
