@@ -5,8 +5,12 @@ OpenAI-compatible /v1, which is the ONLY interface the agents know (rule: no
 backend-specific SDK; `agents.llm.LLMClient` just points at LLM_BASE_URL). Deploying
 this changes three env vars and zero lines of agent code.
 
-    uv run modal deploy llmserve/modal_llm.py
+    uv run --group llm modal deploy llmserve/modal_llm.py
     # → https://musel25--a2a-llm-serve.modal.run/v1
+
+`modal` lives in the `llm` dependency group, not the default sync — so name the group.
+Without it this file raises `ModuleNotFoundError: No module named 'modal'` at the import
+below; the fix is to sync the group, never to drop the import (every decorator needs it).
 
 Auth: vLLM requires the bearer token in the Modal secret `a2a-llm-key` (create once:
 `modal secret create a2a-llm-key LLM_API_KEY=<token>`); clients send the same token
@@ -18,7 +22,7 @@ import subprocess
 
 import modal
 
-MODEL = "Qwen/Qwen3-4B-Instruct-2507"  # ungated; instruct (no <think> preamble)
+MODEL ="Qwen/Qwen3-4B-Instruct-2507"  # ungated; instruct (no <think> preamble)
 SERVED_AS = "qwen3-4b"  # what clients put in LLM_MODEL
 MINUTES = 60
 

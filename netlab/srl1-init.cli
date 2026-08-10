@@ -15,3 +15,31 @@ set / network-instance default admin-state enable
 set / network-instance default interface ethernet-1/1.0
 set / network-instance default interface ethernet-1/2.0
 set / system grpc-server mgmt rate-limit 600
+
+# --- what a tunneled telemetry collector is allowed to reach (ADR-008) ---
+# A telemetry entitlement's tunnel binds its target to a gRPC server INSTANCE, and the
+# instance decides the session's surface. `mgmt` serves [gnmi, gnsi], so binding there
+# would hand the buyer of monitoring a session that also carries gNOI — reboot, file,
+# os. This instance serves gnmi alone. Set over it is still credential-gated, not
+# read-only: role-based read-only was measured on this image and denies every read as
+# well (ADR-008), so per-path read scoping needs gNSI pathz. Provider infrastructure,
+# not per-entitlement config — netctl writes only the destination and tunnel.
+set / system grpc-server telemetry admin-state enable
+set / system grpc-server telemetry services [ gnmi ]
+set / system grpc-server telemetry network-instance mgmt
+set / system grpc-server telemetry port 57401
+set / system grpc-server telemetry default-tls-profile true
+set / system grpc-server telemetry rate-limit 600
+
+# The CPM filter is a stateless port allow-list applied in BOTH directions, so an
+# outbound dial-out needs its own return-path rule or entry 1000 "Drop all else" eats
+# the collector's SYN-ACK (observed: TCP stuck in SYN_RECV, entry 1000's
+# matched-packets climbing, tunnel down with "tcp handshaker shutdown"). The shipped
+# config already does this for SSH — entry 60 permits destination-port 22, entry 70
+# separately permits source-port 22. This is the same rule for the tunnel's port.
+# Lab-only, like the ADR-006 shim: on hardware the CPM policy is the operator's.
+set / acl acl-filter cpm type ipv4 entry 75 description "Accept gRPC-tunnel return path when this router initiates the dial-out (ADR-008)"
+set / acl acl-filter cpm type ipv4 entry 75 match ipv4 protocol tcp
+set / acl acl-filter cpm type ipv4 entry 75 match transport source-port operator eq
+set / acl acl-filter cpm type ipv4 entry 75 match transport source-port value 57401
+set / acl acl-filter cpm type ipv4 entry 75 action accept

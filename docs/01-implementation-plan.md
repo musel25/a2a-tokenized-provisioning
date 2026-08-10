@@ -102,6 +102,7 @@ The skeleton lifecycle test runs in CI forever, in `mock` profile. Profiles sele
 | M6.4 | Dashboard v1 (wireframe + ADR-003) | 2 | a live run watchable end-to-end | epilogue |
 | M6.5 | Demo script + revocation showpiece + recording | 1 | cold replay twice in a row | 8 |
 | M7.1 *(post-plan)* | Evaluation: harness + campaign + docs/09 | 1 | 7 experiments on the real stack; adversarially audited; `e2e/runs/eval/` committed | docs/09 |
+| M7.2 *(post-plan)* ✅ | Telemetry delivery evidence (ADR-008) | 1 | done: destination alone = 0 samples/20 s; + tunnel = counters flowing; teardown = 0 samples/20 s. Lab gains a collector node; `apply_telemetry` writes both grpc-tunnel nodes | 6, 7, 8 |
 
 ---
 

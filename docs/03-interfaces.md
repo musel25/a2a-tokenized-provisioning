@@ -219,8 +219,10 @@ POST /v0/activate           { "entitlement_id": 7, "action": { "kind": "bandwidt
   → 200 { "session_id": "ent7-a1", "state": "active", "expires_at": 1757952000 }
   → 4xx { "error": "E_..." }            // codes in §3.4
 
-POST /v0/teardown           { "session_id": "ent7-a1" }      // idempotent
-  → 200 { "state": "torn_down" }
+POST /v0/teardown           { "session_id": "ent7-a1",       // idempotent
+                              "proof": { "nonce": "0x...", "signature": "0x..." } }
+  → 200 { "state": "torn_down" }        // also for an unknown id (rule 8), and that
+  → 4xx { "error": "E_..." }            // path touches no device
 
 GET  /v0/sessions/{id}
   → 200 { "session_id": "...", "entitlement_id": 7, "state": "active",
@@ -232,11 +234,19 @@ GET  /v0/sessions/{id}
 Message string, signed by the entitlement's current owner:
 
 ```
-a2a-activate|{controller_id}|{nonce}|{entitlement_id}|{expires_at}
+a2a-{action}|{controller_id}|{nonce}|{entitlement_id}|{expires_at}
 ```
+
+`action` is `activate` or `teardown` — ending a session is an authorized act, not a public
+one, and session ids are formulaic (`ent7-a1`). Because the verb is inside the signed
+string, a captured activation proof is not a teardown authorization. Both verbs draw their
+nonce from the same `POST /v0/challenge`.
 
 Controller verifies: signature recovers to `ownerOf(entitlement_id)` **and** nonce is fresh
 (single-use, controller-local store) **and** `expires_at` not passed (chain time).
+
+The two *autonomous* teardown paths (§3.3) carry no proof and need none: their caller is
+the controller itself, acting on chain state it has just read.
 
 ### 3.3 Session states
 
@@ -338,10 +348,26 @@ the agent path.
 ### 5.1 Telemetry delivery (ADR-007, revised) — `TelemetrySample`
 
 **The telemetry ticket is the right to configure telemetry export on the device**, not a
-data feed (ADR-007 "Revision"). `apply_telemetry` writes a real gNMI dial-out destination
-(`/system/grpc-tunnel/destination[name=a2a-<session>]`) to the router pointing at the
-entitlement's `collector_endpoint`; the router exports toward it. The config lives on the
-device (readable back, removed on teardown) — symmetric with the bandwidth policer.
+data feed (ADR-007 "Revision"). `apply_telemetry` writes a real gNMI dial-out to the
+router pointing at the entitlement's `collector_endpoint`; the router then exports toward
+it. The config lives on the device (readable back, removed on teardown) — symmetric with
+the bandwidth policer.
+
+That takes **two** nodes, written in one Set (ADR-008), and only one of them acts:
+
+| node | what it is |
+|---|---|
+| `/system/grpc-tunnel/destination[name=a2a-<session>]` | an address book — address, port, network-instance. No `admin-state`, no `oper-state`, nothing that dials. |
+| `/system/grpc-tunnel/tunnel[name=a2a-<session>]` | the active half: references the destination by name, dials it, and registers a target the collector subscribes through. |
+
+Writing the destination alone leaves config that reads back perfectly and exports
+nothing — measured against a live collector as 0 samples in 20 s. So "is this session
+applied?" means *both* nodes, and teardown deletes the **tunnel first** (the leafref
+blocks removing a destination its tunnel still names). The tunnel's target binds to a
+dedicated `grpc-server telemetry` instance serving `gnmi` alone, so a tunneled collector
+does not also get gNOI; `sensor_paths` and `sample_interval_s` remain entitlement terms
+that the router does **not** enforce — per-path read scoping is gNSI pathz, which ADR-008
+defers.
 
 `TelemetrySample` remains the **wire shape a collector parses** if one is wired up (one
 JSON line per exported sample over TCP). The earlier provider-side forwarder that produced

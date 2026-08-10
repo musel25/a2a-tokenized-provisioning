@@ -43,6 +43,17 @@ class _Session:
     expires_at: int
 
 
+def _torn_down(session_id: str) -> SessionInfo:
+    """Rule 8's answer for a session this controller has no record of."""
+    return SessionInfo(
+        session_id=session_id,
+        entitlement_id=0,
+        state=SessionState.TORN_DOWN,
+        since=0,
+        expires_at=0,
+    )
+
+
 class ControllerService:
     def __init__(
         self,
@@ -114,18 +125,47 @@ class ControllerService:
         self._sessions[session_id] = session
         return self._info(session)
 
+    def teardown_requested(self, session_id: str, nonce: str, signature: str) -> SessionInfo:
+        """The proof-carrying teardown: what POST /v0/teardown calls.
+
+        Ending a session is an authorized act, not a public one. `teardown` below takes
+        no proof because its callers are the controller's own timer and Revoked watcher;
+        reachable over HTTP it would let anyone end anyone's session, and session ids are
+        formulaic (`ent7-a0`), so guessing them is not a barrier. The proof binds the
+        caller to `ownerOf(entitlement_id)` exactly as activation does, over an
+        `a2a-teardown|…` string so an activate proof cannot be replayed here.
+
+        Unknown ids answer torn_down without touching the network (rule 8 stays: never an
+        error), because with no session there is no entitlement to check a proof against —
+        and an unverified caller must not reach the provisioner with a name of its choosing.
+        """
+        session = self._sessions.get(session_id)
+        if session is None:
+            return _torn_down(session_id)
+        owner = self._reader.owner_of(session.entitlement_id)
+        denial = self._auth.verify(
+            session.entitlement_id,
+            nonce,
+            signature,
+            owner,
+            self._reader.chain_time(),
+            action="teardown",
+        )
+        if denial is not None:
+            raise Denied(denial)
+        return self.teardown(session_id)
+
     def teardown(self, session_id: str) -> SessionInfo:
-        """Idempotent (rule 8): unknown or already-down sessions answer torn_down."""
+        """Idempotent (rule 8): unknown or already-down sessions answer torn_down.
+
+        Internal: no proof. Callers are `tick`, `handle_revoked`, and the failed-apply
+        path above — all of them the controller acting on chain state it just read, not a
+        request from outside. The HTTP surface goes through `teardown_requested`.
+        """
         session = self._sessions.get(session_id)
         if session is None:
             self._net.teardown(session_id)  # belt: clear any stray config by name
-            return SessionInfo(
-                session_id=session_id,
-                entitlement_id=0,
-                state=SessionState.TORN_DOWN,
-                since=0,
-                expires_at=0,
-            )
+            return _torn_down(session_id)
         self._net.teardown(session_id)
         session.state = transition(session.state, "teardown")
         return self._info(session)

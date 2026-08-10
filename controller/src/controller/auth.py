@@ -26,13 +26,25 @@ from a2a_interfaces import ErrorCode
 # One template, agreed in docs/03 §3.2. chainmcp builds the same string on the signing
 # side; the two implementations are pinned against each other in e2e (cross-package
 # parity — neither may import the other, both answer to the doc).
-PROOF_TEMPLATE = "a2a-activate|{controller_id}|{nonce}|{entitlement_id}|{expires_at}"
+#
+# The action is part of the signed string, so a proof authorizes ONE verb. An owner who
+# signs to activate has not thereby signed to tear down, and a captured activate proof
+# cannot be replayed against /v0/teardown. `action="activate"` reproduces the original
+# `a2a-activate|…` string byte for byte, which is what docs/03 §3.2 publishes.
+PROOF_TEMPLATE = "a2a-{action}|{controller_id}|{nonce}|{entitlement_id}|{expires_at}"
 
 NONCE_TTL_S = 300  # a challenge is good for five minutes of chain time
 
 
-def proof_message(controller_id: str, nonce: str, entitlement_id: int, expires_at: int) -> str:
+def proof_message(
+    controller_id: str,
+    nonce: str,
+    entitlement_id: int,
+    expires_at: int,
+    action: str = "activate",
+) -> str:
     return PROOF_TEMPLATE.format(
+        action=action,
         controller_id=controller_id,
         nonce=nonce,
         entitlement_id=entitlement_id,
@@ -75,6 +87,7 @@ class AuthStore:
         signature: str,
         owner: str,
         now: int,
+        action: str = "activate",
     ) -> ErrorCode | None:
         """None if the proof binds (owner, nonce, this controller, in time); else the
         first failing ErrorCode. The nonce burns on ANY verification attempt — a
@@ -87,7 +100,7 @@ class AuthStore:
             return ErrorCode.E_BAD_PROOF  # a nonce is bound to ONE ticket
         if now > expires_at:
             return ErrorCode.E_BAD_PROOF  # stale challenge, judged on chain time
-        message = proof_message(self.controller_id, nonce, entitlement_id, expires_at)
+        message = proof_message(self.controller_id, nonce, entitlement_id, expires_at, action)
         try:
             signer = Account.recover_message(encode_defunct(text=message), signature=signature)
         except Exception:  # noqa: BLE001 — malformed bytes are just a bad proof

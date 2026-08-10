@@ -51,6 +51,26 @@ def _activate(client, entitlement_id: int, key=ADA_KEY):
     )
 
 
+def _teardown(client, session_id: str, entitlement_id: int = TICKET_ID, key=ADA_KEY):
+    """Teardown is proof-carrying too: same challenge, `a2a-teardown|…` string."""
+    challenge = client.post("/v0/challenge", json={"entitlement_id": entitlement_id}).json()
+    message = proof_message(
+        challenge["controller_id"],
+        challenge["nonce"],
+        entitlement_id,
+        challenge["expires_at"],
+        "teardown",
+    )
+    signature = "0x" + key.sign_message(encode_defunct(text=message)).signature.hex()
+    return client.post(
+        "/v0/teardown",
+        json={
+            "session_id": session_id,
+            "proof": {"nonce": challenge["nonce"], "signature": signature},
+        },
+    )
+
+
 def test_happy_path_over_http(world):
     clock, chain, net, service, client = world
 
@@ -64,11 +84,66 @@ def test_happy_path_over_http(world):
     assert fetched["entitlement_id"] == TICKET_ID
     assert fetched["expires_at"] == WINDOW.end
 
-    down = client.post("/v0/teardown", json={"session_id": body["session_id"]})
+    down = _teardown(client, body["session_id"])
     assert down.json() == {"state": "torn_down"}
-    assert client.post("/v0/teardown", json={"session_id": body["session_id"]}).json() == {
-        "state": "torn_down"  # idempotent over HTTP too
+    assert _teardown(client, body["session_id"]).json() == {
+        "state": "torn_down"  # idempotent over HTTP too (rule 8), one fresh nonce each
     }
+
+
+def test_teardown_without_a_proof_is_rejected(world):
+    """The endpoint used to take a bare session_id, and ids are formulaic (ent7-a0),
+    so anyone who could reach the controller could end anyone's session."""
+    *_, net, service, client = world
+    session_id = _activate(client, TICKET_ID).json()["session_id"]
+
+    assert client.post("/v0/teardown", json={"session_id": session_id}).status_code == 422
+    assert service.session(session_id).state.value == "active"
+    assert session_id in net.applied  # the device is still configured
+
+
+def test_teardown_proof_from_a_non_owner_is_rejected(world):
+    *_, net, service, client = world
+    session_id = _activate(client, TICKET_ID).json()["session_id"]
+
+    mallory = Account.create()
+    assert _teardown(client, session_id, key=mallory).status_code == 403
+    assert service.session(session_id).state.value == "active"
+    assert session_id in net.applied
+
+
+def test_an_activate_proof_cannot_be_replayed_against_teardown(world):
+    """The verb is inside the signed string, so a captured activation proof is not a
+    teardown authorization."""
+    *_, service, client = world
+    session_id = _activate(client, TICKET_ID).json()["session_id"]
+
+    challenge = client.post("/v0/challenge", json={"entitlement_id": TICKET_ID}).json()
+    message = proof_message(
+        challenge["controller_id"], challenge["nonce"], TICKET_ID, challenge["expires_at"]
+    )  # signed for "activate"
+    signature = "0x" + ADA_KEY.sign_message(encode_defunct(text=message)).signature.hex()
+    replayed = client.post(
+        "/v0/teardown",
+        json={
+            "session_id": session_id,
+            "proof": {"nonce": challenge["nonce"], "signature": signature},
+        },
+    )
+    assert replayed.status_code == 403
+    assert service.session(session_id).state.value == "active"
+
+
+def test_teardown_of_an_unknown_session_answers_torn_down_without_touching_the_network(world):
+    """Rule 8 survives (never an error), but an unverified caller must not reach the
+    provisioner with a session name of its choosing."""
+    *_, net, _service, client = world
+    before = list(net.torn_down)
+
+    response = _teardown(client, "ent999-a0")
+
+    assert response.json() == {"state": "torn_down"}
+    assert net.torn_down == before
 
 
 def test_unknown_entitlement_is_404(world):

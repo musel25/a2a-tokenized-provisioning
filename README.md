@@ -11,10 +11,14 @@ The running example: Ada (a consumer agent) buys 50 Mbps on path A→B from Bell
 agent) for 10 TOK; one atomic transaction mints entitlement **#7** to Ada, and a
 deterministic controller honors it by shaping the router — no human, no prior trust.
 
-> **New here and want to learn the whole thing?** Work through the course notebooks
-> ([`e2e/notebooks/course/`](e2e/notebooks/course/) — each chapter rebuilds one layer
-> from zero), then run [`e2e/notebooks/paper.ipynb`](e2e/notebooks/paper.ipynb) — the
-> paper as one executable notebook: a live lifecycle plus every evaluation figure.
+> **New here and want to learn the whole thing?** Start with
+> [`e2e/notebooks/TUTORIAL.ipynb`](e2e/notebooks/TUTORIAL.ipynb) — the whole project in
+> one sitting, assuming no blockchain, networking, or agent background: you rebuild every
+> layer in plain Python by running the attack each piece exists to stop, then run the real
+> component. Go deeper per layer in the course notebooks
+> ([`e2e/notebooks/course/`](e2e/notebooks/course/)), then run
+> [`e2e/notebooks/paper.ipynb`](e2e/notebooks/paper.ipynb) — the paper as one executable
+> notebook: a live lifecycle plus every evaluation figure.
 
 ## Read first, in order
 
@@ -52,6 +56,12 @@ just console                                       # → http://127.0.0.1:8099
 just explorer                                      # optional: block explorer → http://localhost:5100
 ```
 
+Note `just up` is *not* in that list — it serves the headless lifecycle tests, while the
+console boots its own chain. Presenting? Walk the four-step preflight in
+[`docs/08-demo-dashboard.md`](docs/08-demo-dashboard.md) first: every lane degrades
+silently and honestly (no lab → mock router, cold endpoint → deterministic judgment), so a
+half-real demo looks exactly like a real one until the audience asks.
+
 Open the console, tell Ada what you want ("get me 50 Mbps under 12 TOK"), and watch the
 request cross agents → chain → controller → router, live. `Revoke` kills it mid-window.
 With the explorer up, every tx hash in the event stream links into Otterscan — inspect
@@ -65,10 +75,10 @@ stand-ins (instant, offline). To make them *real model judgments*, deploy the LL
 and write `.env` (full steps: [`llmserve/README.md`](llmserve/README.md)):
 
 ```sh
-uv run modal setup                                              # once per machine
-uv run modal secret create a2a-llm-key LLM_API_KEY=$(openssl rand -hex 16)
-uv run modal deploy llmserve/modal_llm.py                       # → your /v1 endpoint
-cp .env.example .env                                            # fill in URL + token
+uv run --group llm modal setup                          # once per machine
+uv run --group llm modal secret create a2a-llm-key LLM_API_KEY=$(openssl rand -hex 16)
+uv run --group llm modal deploy llmserve/modal_llm.py   # → your /v1 endpoint
+cp .env.example .env                                    # fill in URL + token
 ```
 
 Restart `just console` — the header pill turns `judgment · qwen3-4b`. **Click the pill**

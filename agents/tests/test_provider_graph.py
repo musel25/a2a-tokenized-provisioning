@@ -9,6 +9,7 @@ from a2a_interfaces import Decline, SignedOffer
 from a2a_interfaces.fixtures import CANONICAL_SIGNED_OFFER, TELEMETRY_NEED, WINDOW
 
 from agents.provider_graph import (
+    QUOTE_HOLD_S,
     QUOTE_SYSTEM,
     CapacityLedger,
     ProviderState,
@@ -77,6 +78,80 @@ def test_capacity_ledger_is_all_or_nothing():
     assert ledger.try_reserve((0, 10), 60) is True
     assert ledger.try_reserve((0, 10), 60) is False  # would oversell
     assert ledger.available((0, 10)) == 40  # unchanged by the failed reserve
+
+
+def test_concurrent_admissions_cannot_oversell_one_slot():
+    """The check-then-act race: `try_reserve` reads `available` and then appends, so
+    two threads can both see the same free capacity and both take it.
+
+    The window between the read and the append is a few bytecodes wide, so under the
+    GIL it almost never loses the interpreter — a plain thread race passes with or
+    without the lock and proves nothing. The clock widens it honestly: `_sweep` calls
+    it on every read, so a clock that sleeps yields the GIL *inside* the critical
+    section, exactly where a slower real ledger (an RPC, a database) would. Eight
+    threads then race for a pool with room for one; exactly one must win."""
+    import threading
+    import time
+
+    def slow_chain_time() -> int:
+        time.sleep(0.005)  # a yield point between the check and the act
+        return 1000
+
+    ledger = CapacityLedger(capacity=1, clock=slow_chain_time)
+    start = threading.Barrier(8)
+    wins: list[bool] = []
+    record = threading.Lock()
+
+    def contend() -> None:
+        start.wait()  # release every thread into try_reserve together
+        got = ledger.try_reserve((0, 10), 1)
+        with record:
+            wins.append(got)
+
+    threads = [threading.Thread(target=contend) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert sum(wins) == 1, f"{sum(wins)} admissions fit into capacity for one"
+    assert ledger.available((0, 10)) == 0
+
+
+def test_holds_expire_so_quoting_without_accepting_cannot_drain_the_pool():
+    """Admission reserves before the price is known, and a consumer may never accept.
+    Without an expiry, asking for quotes was enough to exhaust the pool for free."""
+    now = [1000]
+    ledger = CapacityLedger(capacity=100, clock=lambda: now[0])
+
+    assert ledger.try_reserve((0, 10), 100) is True
+    assert ledger.try_reserve((0, 10), 100) is False  # first hold is still live
+
+    now[0] += QUOTE_HOLD_S + 1  # the quote went stale, unaccepted
+    assert ledger.available((0, 10)) == 100
+    assert ledger.try_reserve((0, 10), 100) is True
+
+
+def test_a_signed_offer_holds_capacity_until_the_offer_expires():
+    """Once signed, the hold tracks the offer the buyer is actually holding — longer
+    than the default quote hold, and no longer."""
+    now = [1000]
+    ledger = CapacityLedger(capacity=100, clock=lambda: now[0])
+    ledger.try_reserve((0, 10), 100)
+    ledger.hold_until((0, 10), 100, expires_at=now[0] + QUOTE_HOLD_S * 4)
+
+    now[0] += QUOTE_HOLD_S + 1  # past the default hold, still inside offer validity
+    assert ledger.available((0, 10)) == 0
+
+    now[0] += QUOTE_HOLD_S * 4
+    assert ledger.available((0, 10)) == 100  # offer lapsed, capacity back on the market
+
+
+def test_a_ledger_without_a_clock_never_expires_a_hold():
+    """The unit-test and det-condition behaviour, unchanged: no clock, no expiry."""
+    ledger = CapacityLedger(capacity=100)
+    assert ledger.try_reserve((0, 10), 100) is True
+    assert ledger.available((0, 10)) == 0
 
 
 def test_deterministic_slot_quotes_the_list_price():
