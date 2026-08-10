@@ -42,11 +42,16 @@ class MockProvisioner:
         collector_endpoint: str,
         sample_interval_s: int,
     ) -> ApplyResult:
+        # `nodes` mirrors ADR-008: honoring a telemetry ticket writes the address-book
+        # destination AND the tunnel that dials it. The mock carries both so that
+        # "is it applied?" means the same thing here as on the router — a mock that
+        # recorded one node would go green against a provisioner that exports nothing.
         self.applied[session_id] = {
             "target": target,
             "sensor_paths": sensor_paths,
             "collector_endpoint": collector_endpoint,
             "sample_interval_s": sample_interval_s,
+            "nodes": ("destination", "tunnel"),
         }
         return ApplyResult(ok=True)
 

@@ -1,0 +1,43 @@
+# The CONSUMER's telemetry collector (ADR-008) — a gRPC-tunnel server, not a
+# gNMI client that dials the router.
+#
+# Direction matters. A collector that dialled in would receive samples because it
+# asked, proving nothing about the entitlement; here the router dials out, because
+# the entitlement's config told it to, and the collector only accepts what arrives.
+# Delete that config and this file goes quiet — which is the whole demonstration.
+
+# TLS, twice, in opposite directions:
+#   - the TUNNEL transport is plaintext. SR Linux dials plaintext when its
+#     destination carries no tls-profile, and a TLS listener here just closes the
+#     socket on it ("UNAVAILABLE: Socket closed"). So `tunnel-server` has no tls block.
+#   - the gNMI session INSIDE the tunnel still terminates on the router's grpc-server,
+#     which serves TLS. So the client half is TLS with verification skipped
+#     (lab-only, self-signed). `insecure: true` here fails as "error reading server
+#     preface: EOF" — a plaintext client meeting a TLS server.
+insecure: false
+skip-verify: true
+username: admin
+password: NokiaSrl1!
+log: true
+
+subscriptions:
+  a2a-telemetry:
+    # The sensor paths the telemetry entitlement names. The router does NOT enforce
+    # them: the tunnel hands over a gNMI session, and scoping which paths that
+    # session may read is gNSI pathz, which ADR-008 defers. A collector could
+    # subscribe outside what it bought — recorded as a known gap, not a claim.
+    paths:
+      - /interface[name=ethernet-1/1]/statistics
+    sample-interval: 5s
+    mode: stream
+    stream-mode: sample
+
+tunnel-server:
+  address: :57401
+  target-wait-time: 2s
+  targets:
+    - id: .*
+      type: GNMI_GNOI
+      config:
+        subscriptions:
+          - a2a-telemetry

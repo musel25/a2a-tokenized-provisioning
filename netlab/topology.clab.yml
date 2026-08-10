@@ -39,6 +39,18 @@ topology:
         - ip link set eth1 mtu 1500
         - ip address add 10.10.2.10/24 dev eth1
         - ip route add 10.10.1.0/24 via 10.10.2.1
+    # The CONSUMER's telemetry collector (ADR-008): a gRPC-tunnel server the router
+    # dials OUT to, because the telemetry entitlement's config told it to. It sits on
+    # the management bridge, not on the host — bridge→host is dropped on the dev
+    # machine while bridge→container is not, so a host-side collector is
+    # indistinguishable from a broken tunnel. No data links: it is reached over the
+    # same bridge as gNMI, which is what makes it the *management* plane's product.
+    collector:
+      kind: linux
+      image: ghcr.io/openconfig/gnmic:latest
+      binds:
+        - collector/gnmic.yaml:/app/gnmic.yaml:ro
+      cmd: --config /app/gnmic.yaml subscribe --use-tunnel-server
 
   links:
     - endpoints: ["srl1:e1-1", "hostA:eth1"]

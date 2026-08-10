@@ -272,6 +272,40 @@ Note what "sampling" means here — the router pushes on ITS schedule
 connects to the router), which is exactly the delivery-model question ADR-007 must
 answer for `apply_telemetry` (M3.3).
 
+### 7.1 Dial-**out**: what the telemetry ticket actually configures (ADR-008)
+
+Dial-in proves nothing about a ticket — samples arrive because the collector asked. The
+product is the other direction: the router dials the *consumer's* collector because the
+entitlement's config told it to. The lab has a `collector` node
+(`ghcr.io/openconfig/gnmic`, on the management bridge) running a gRPC-tunnel server for
+exactly this.
+
+Three things must all be true, and each fails as "the collector is broken":
+
+1. **Both grpc-tunnel nodes are written.** `destination` is an address book with no
+   `admin-state` and no `oper-state`; `tunnel` is what dials. Destination alone =
+   0 samples, forever, with a healthy collector on the far end.
+2. **The CPM filter permits the return path.** It is a stateless port allow-list applied
+   in *both* directions — which is why the shipped config carries entry 60
+   (`destination-port 22`) *and* entry 70 (`source-port 22`) for SSH. `srl1-init.cli`
+   adds entry 75 for the tunnel port. Without it: `oper-state down`,
+   `"tcp handshaker shutdown"`, and entry 1000's `matched-packets` climbing.
+3. **TLS points opposite ways on the two hops.** The tunnel transport is plaintext (SR
+   Linux dials plaintext with no `tls-profile`; a TLS listener answers
+   `UNAVAILABLE: Socket closed`), while the gNMI session *inside* the tunnel meets the
+   router's grpc-server and must be TLS (plaintext there gives
+   `error reading server preface: EOF`).
+
+Check it end to end:
+
+```
+$ docker logs clab-a2a-collector | grep in-octets
+```
+
+Samples while a session is up; silence within a few seconds of teardown. The collector
+is bound to a dedicated `grpc-server telemetry` instance serving `gnmi` only — `mgmt`
+serves `[gnmi, gnsi]`, and binding there would hand a monitoring buyer gNOI as well.
+
 
 ---
 
@@ -283,6 +317,13 @@ answer for `apply_telemetry` (M3.3).
   every port `admin-state disable`, pings time out, no error anywhere on the console.
 - **A freshly committed config needs a beat** — the first ping after `commit now` can
   lose its lead packets to ARP; measure after a warm-up, not across it.
+- **A committed telemetry export that delivers nothing** (§7.1) — the destination node
+  is inert on its own, the CPM filter drops the dial-out's return path, and the two hops
+  want opposite TLS. Like the ADR-006 shim, the CPM entry is a *lab* fixture: on
+  hardware the CPM policy is the operator's, and neither is deployed.
+- **A collector on the host instead of the bridge sees nothing** — bridge→host is
+  dropped on this machine, bridge→container is not, so a host-side collector is
+  indistinguishable from a broken tunnel.
 - **pygnmi + self-signed TLS = silent timeout** (M3.1): the router's cert is a
   self-signed leaf (`CN=srl1` — the lab CA never reaches the node, same sudoless-overlay
   breakage as §4), and pygnmi's `skipverify` still verifies underneath →

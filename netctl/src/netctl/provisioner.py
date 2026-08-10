@@ -23,6 +23,13 @@ from .connect import GnmiTarget, connect
 # small enough that the plateau stays crisp.
 _BURST_BYTES = 125_000
 
+# Which gRPC server instance a tunneled collector lands on (ADR-008). NOT `mgmt`:
+# mgmt serves [gnmi, gnsi], so a tunnel target bound there would hand the buyer of
+# *monitoring* a session carrying gNOI too — reboot, file, os. This instance is
+# provisioned with gnmi alone (netlab/srl1-init.cli). A provisioning convention like
+# _BURST_BYTES, not topology: it is the same name on every device netctl drives.
+_TUNNEL_GRPC_SERVER = "telemetry"
+
 
 def _template_name(session_id: str) -> str:
     return f"a2a-{session_id}"
@@ -95,11 +102,23 @@ class GnmiProvisioner:
         sample_interval_s: int,
     ) -> ApplyResult:
         """ADR-007: the telemetry ticket is the RIGHT to configure telemetry export on
-        the device. Honor it by writing a real gNMI-dial-out destination to the router
-        (SR Linux `grpc-tunnel destination`) pointing at the consumer's collector — the
-        router will export toward it. This is symmetric with `apply_bandwidth`: the
-        token authorizes a config write, the config lives ON the device (readable back),
-        and teardown removes it (stateless, rule 8) — no provider-side forwarder process.
+        the device. Honor it by writing a real gNMI dial-out to the router pointing at
+        the consumer's collector — the router then exports toward it. This is symmetric
+        with `apply_bandwidth`: the token authorizes a config write, the config lives ON
+        the device (readable back), and teardown removes it (stateless, rule 8) — no
+        provider-side forwarder process.
+
+        ADR-008: that takes BOTH grpc-tunnel nodes, written in one Set. The destination
+        is only an address book; the tunnel is what dials it and registers the target a
+        collector subscribes through. An earlier version wrote the destination alone —
+        config that read back perfectly and exported nothing, even to a live collector.
+
+        `sensor_paths` and `sample_interval_s` are terms of the entitlement but are NOT
+        written here, and that is a real gap rather than an oversight: the tunnel hands
+        the collector a gNMI session, and which paths it may then read is authorization
+        that lives in gNSI pathz, not in this config tree (ADR-008 measured the cheaper
+        role-based route and found it denies every read on this image). A collector can
+        subscribe outside the paths it bought.
         """
         name = _template_name(session_id)
         host, _, port = collector_endpoint.rpartition(":")
@@ -108,9 +127,26 @@ class GnmiProvisioner:
             "port": int(port) if port.isdigit() else 57400,
             "network-instance": "mgmt",
         }
+        tunnel = {
+            "admin-state": "enable",
+            # References the destination above by name — the leafref that forces
+            # teardown to delete this node FIRST (see _session_telemetry_on).
+            "destination": [{"name": name, "admin-state": "enable"}],
+            "target": [
+                {
+                    "name": target.device,
+                    "id": {"node-name": [None]},  # empty-type leaf: the router's own name
+                    "type": {"gnmi-gnoi-server": _TUNNEL_GRPC_SERVER},
+                }
+            ],
+        }
         try:
             self._client(target.device).set(
-                update=[(paths.telemetry_destination(name), destination)], encoding="json_ietf"
+                update=[
+                    (paths.telemetry_destination(name), destination),
+                    (paths.telemetry_tunnel(name), tunnel),
+                ],
+                encoding="json_ietf",
             )
         except Exception as err:  # noqa: BLE001 — the port reports, callers decide
             return ApplyResult(ok=False, detail=f"gNMI Set failed: {err}")
@@ -196,30 +232,72 @@ class GnmiProvisioner:
         return deletes
 
     def _session_telemetry_on(self, client, name: str) -> list[str]:
-        """The telemetry-export destinations this session installed (found on the
-        router, so teardown is stateless — rule 8)."""
-        deletes: list[str] = []
+        """The telemetry-export config this session installed (found on the router, so
+        teardown is stateless — rule 8).
+
+        Ordered tunnel-first: the tunnel holds a leafref to the destination, and the
+        router refuses to delete a destination still referenced — the same ordering
+        lesson as the policer attachment in `_session_config_on`. Deleting the tunnel
+        is also what actually stops delivery; the destination outlives it silently.
+        """
+        tunnels: list[str] = []
+        destinations: list[str] = []
         cfg = client.get(
             path=[paths.TELEMETRY_DESTINATIONS], encoding="json_ietf", datatype="config"
         )
         for update in cfg["notification"][0].get("update") or []:
-            for dest in _denamespace(update["val"] or {}).get("destination", []):
+            node = _denamespace(update["val"] or {})
+            for tunnel in node.get("tunnel", []):
+                if tunnel.get("name") == name:
+                    tunnels.append(paths.telemetry_tunnel(name))
+            for dest in node.get("destination", []):
                 if dest.get("name") == name:
-                    deletes.append(paths.telemetry_destination(name))
-        return deletes
+                    destinations.append(paths.telemetry_destination(name))
+        return tunnels + destinations
 
     def telemetry_config(self, device: str) -> list[dict]:
-        """Every a2a telemetry-export destination currently on the router (for the
-        inspector) — read live off the device, like the policer readout."""
+        """Every a2a telemetry export currently on the router (for the inspector) —
+        read live off the device, like the policer readout.
+
+        Each entry carries the destination's fields plus `tunnel`: whether the active
+        half exists, and what the router says its oper-state is. Reading the
+        destination alone would report a session as present that cannot export
+        anything (ADR-008), which is the readout that hid the gap in the first place.
+        """
         client = self._client(device)
         cfg = client.get(
             path=[paths.TELEMETRY_DESTINATIONS], encoding="json_ietf", datatype="config"
         )
-        out = []
+        destinations, tunnels = [], set()
         for update in cfg["notification"][0].get("update") or []:
-            for dest in _denamespace(update["val"] or {}).get("destination", []):
-                if dest.get("name", "").startswith("a2a-"):
-                    out.append(dest)
+            node = _denamespace(update["val"] or {})
+            destinations += [
+                d for d in node.get("destination", []) if d.get("name", "").startswith("a2a-")
+            ]
+            tunnels |= {t.get("name") for t in node.get("tunnel", [])}
+        oper = self._tunnel_oper_states(client)
+        return [
+            {**dest, "tunnel": dest["name"] in tunnels, "oper_state": oper.get(dest["name"])}
+            for dest in destinations
+        ]
+
+    @staticmethod
+    def _tunnel_oper_states(client) -> dict[str, str]:
+        """name → oper-state for every grpc tunnel, or {} if state is unreadable.
+
+        Best-effort: an inspector readout must not fail because the state branch
+        moved. The config half above is the load-bearing part.
+        """
+        try:
+            state = client.get(
+                path=[paths.TELEMETRY_DESTINATIONS], encoding="json_ietf", datatype="state"
+            )
+        except Exception:  # noqa: BLE001 — see docstring
+            return {}
+        out: dict[str, str] = {}
+        for update in state["notification"][0].get("update") or []:
+            for tunnel in _denamespace(update["val"] or {}).get("tunnel", []):
+                out[tunnel.get("name")] = tunnel.get("oper-state")
         return out
 
 

@@ -348,10 +348,26 @@ the agent path.
 ### 5.1 Telemetry delivery (ADR-007, revised) — `TelemetrySample`
 
 **The telemetry ticket is the right to configure telemetry export on the device**, not a
-data feed (ADR-007 "Revision"). `apply_telemetry` writes a real gNMI dial-out destination
-(`/system/grpc-tunnel/destination[name=a2a-<session>]`) to the router pointing at the
-entitlement's `collector_endpoint`; the router exports toward it. The config lives on the
-device (readable back, removed on teardown) — symmetric with the bandwidth policer.
+data feed (ADR-007 "Revision"). `apply_telemetry` writes a real gNMI dial-out to the
+router pointing at the entitlement's `collector_endpoint`; the router then exports toward
+it. The config lives on the device (readable back, removed on teardown) — symmetric with
+the bandwidth policer.
+
+That takes **two** nodes, written in one Set (ADR-008), and only one of them acts:
+
+| node | what it is |
+|---|---|
+| `/system/grpc-tunnel/destination[name=a2a-<session>]` | an address book — address, port, network-instance. No `admin-state`, no `oper-state`, nothing that dials. |
+| `/system/grpc-tunnel/tunnel[name=a2a-<session>]` | the active half: references the destination by name, dials it, and registers a target the collector subscribes through. |
+
+Writing the destination alone leaves config that reads back perfectly and exports
+nothing — measured against a live collector as 0 samples in 20 s. So "is this session
+applied?" means *both* nodes, and teardown deletes the **tunnel first** (the leafref
+blocks removing a destination its tunnel still names). The tunnel's target binds to a
+dedicated `grpc-server telemetry` instance serving `gnmi` alone, so a tunneled collector
+does not also get gNOI; `sensor_paths` and `sample_interval_s` remain entitlement terms
+that the router does **not** enforce — per-path read scoping is gNSI pathz, which ADR-008
+defers.
 
 `TelemetrySample` remains the **wire shape a collector parses** if one is wired up (one
 JSON line per exported sample over TCP). The earlier provider-side forwarder that produced

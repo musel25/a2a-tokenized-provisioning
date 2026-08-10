@@ -394,14 +394,20 @@ class Console:
             # router — read it back off srl1 as proof (symmetric with the policer)
             dests = self.provisioner.telemetry_config("srl1")
             d = dests[0] if dests else {}
+            # `oper` is the router's word, not ours (ADR-008). The tunnel only reaches
+            # `up` against a collector that is actually listening, and the story's
+            # collector address is a narrative one — so a demo on the stock fixture
+            # shows the config written and the tunnel still dialling. Reporting a
+            # hardcoded "up" here is exactly the decoration ADR-008 refused.
             state = {
-                "online": True, "mode": "telemetry", "interface": "ethernet-1/1", "oper": "up",
+                "online": True, "mode": "telemetry", "interface": "ethernet-1/1",
+                "oper": d.get("oper_state") or "dialling",
                 "destination": d.get("name", ""), "collector": f"{d.get('address', '')}:{d.get('port', '')}",
                 "path": TELEMETRY_NEED.sensor_paths[0], "installed": bool(dests),
             }
             emit({"kind": "device", "domain": "network", "state": state,
                   "title": "telemetry export configured",
-                  "detail": f"grpc-tunnel destination {d.get('name', '')} → {d.get('address', '')}:{d.get('port', '')} · written to srl1",
+                  "detail": f"grpc-tunnel destination + tunnel {d.get('name', '')} → {d.get('address', '')}:{d.get('port', '')} · written to srl1",
                   "t": _now_ms()})
 
     def _emit_teardown(self, eid: int, sid: str, emit: Emit) -> None:
@@ -411,11 +417,11 @@ class Console:
             return
         if self.last_service == "telemetry":
             state = {"online": True, "mode": "telemetry", "interface": "ethernet-1/1",
-                     "oper": "up", "installed": bool(self.provisioner.telemetry_config("srl1")),
+                     "oper": "down", "installed": bool(self.provisioner.telemetry_config("srl1")),
                      "destination": "", "collector": "", "path": TELEMETRY_NEED.sensor_paths[0]}
             emit({"kind": "device", "domain": "network", "state": state,
                   "title": "telemetry export removed",
-                  "detail": "grpc-tunnel destination deleted from srl1 — access withdrawn",
+                  "detail": "grpc-tunnel tunnel then destination deleted from srl1 — export stops, access withdrawn",
                   "t": _now_ms()})
             return
         _shim()

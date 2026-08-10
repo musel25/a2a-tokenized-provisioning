@@ -23,15 +23,26 @@ def qos_interface(subinterface: str) -> str:
     return f"/qos/interfaces/interface[interface-id={subinterface}]"
 
 
-# --- telemetry export config (the right the telemetry ticket buys, ADR-007) --
+# --- telemetry export config (the right the telemetry ticket buys, ADR-007/008) --
 # SR Linux's gNMI dial-out: configure the router to export toward a collector. Writing
 # this IS honoring the telemetry ticket — symmetric with installing a policer.
+#
+# It takes TWO nodes, and only one of them does anything (ADR-008). `destination` is an
+# address book: address, port, network-instance, tls-profile — no admin-state, no
+# oper-state, nothing that dials. `tunnel` is the active half; it references a
+# destination by name, dials it, and registers a target the collector subscribes
+# through. Writing the destination alone leaves config that reads back correctly and
+# exports nothing, which is exactly the trap ADR-008 was written to close.
 
 TELEMETRY_DESTINATIONS = "/system/grpc-tunnel"
 
 
 def telemetry_destination(name: str) -> str:
     return f"/system/grpc-tunnel/destination[name={name}]"
+
+
+def telemetry_tunnel(name: str) -> str:
+    return f"/system/grpc-tunnel/tunnel[name={name}]"
 
 
 # --- interface state (docs/07 §7) --------------------------------------------

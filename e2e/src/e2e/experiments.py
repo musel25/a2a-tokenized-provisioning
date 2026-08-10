@@ -268,7 +268,13 @@ def _bandwidth_names(prov: TimingProvisioner) -> set[str]:
 
 
 def _telemetry_names(prov: TimingProvisioner) -> set[str]:
-    return {d["name"] for d in prov.inner.telemetry_config("srl1")}
+    """A telemetry session counts as present only if BOTH grpc-tunnel nodes are.
+
+    The exact counterpart of `_bandwidth_names` requiring template AND attachment:
+    the destination on its own reads back perfectly and exports nothing (ADR-008), so
+    a readback that accepted it would call a dead session enforced.
+    """
+    return {d["name"] for d in prov.inner.telemetry_config("srl1") if d["tunnel"]}
 
 
 def _gas(client: ChainClient, tx_hash: str) -> int:
