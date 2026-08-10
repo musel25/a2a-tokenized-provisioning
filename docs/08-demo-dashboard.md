@@ -43,13 +43,15 @@ write one config to the router*:
 
 - **Bandwidth** → a rate **policer** (`/qos`). The inspector reads it back off srl1 and
   iperf measures the enforced throughput (~49 Mbps).
-- **Telemetry** → a **dial-out export destination** (`/system/grpc-tunnel`). The token is
-  the *right to configure telemetry export on the device*; the inspector shows the
-  `grpc-tunnel destination` the controller wrote, read straight off the router.
+- **Telemetry** → a **dial-out export** (`/system/grpc-tunnel`): a destination naming the
+  buyer's collector *and* the tunnel that dials it (ADR-008 — the destination alone is an
+  address book and exports nothing). The token is the *right to configure telemetry export
+  on the device*; the inspector shows both nodes the controller wrote, read straight off
+  the router, with the router's own `oper-state` for the tunnel.
 
 Then **Revoke**: the relay's signal is *cut at the chain*, the break propagates to the
 router, and the config is removed (bandwidth throughput jumps back to 100 Mbps; the
-telemetry export destination is deleted from srl1).
+telemetry tunnel then destination are deleted from srl1 and the samples stop).
 
 **Real LLM judgment** (ADR-001 amendment): deploy the agents' model once
 (`uv run modal deploy llmserve/modal_llm.py`, see `llmserve/README.md`), put the endpoint
@@ -163,7 +165,7 @@ little changed*:
 
 ```
 admit        (agents)     Bell's admission: reserved 1 collector slot · pool 7/8 free
-apply_telemetry (network) gNMI Set: telemetry export destination on srl1 → Ada's collector
+apply_telemetry (network) gNMI Set: telemetry destination + tunnel on srl1 → Ada's collector
   telemetry: export a2a-ent8-a1 configured on srl1
 ```
 

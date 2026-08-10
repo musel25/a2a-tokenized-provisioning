@@ -1,6 +1,10 @@
 # ADR-007 — Telemetry as a device-config right (revised from a forwarder)
 
-**Status:** accepted · 2026-07-07 · **revised** 2026-07-07 (see "Revision")
+**Status:** accepted · 2026-07-07 · **revised** 2026-07-07 (see "Revision") ·
+its "delivery is out of scope for v0" consequence is **superseded by ADR-008**
+(2026-08-10), which found that the destination this ADR specifies is the *inert*
+half of SR Linux's two-node dial-out and adds the tunnel that dials. The decision
+below — telemetry is a device-config right, not a data feed — still stands.
 
 ## Context
 
