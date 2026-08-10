@@ -50,7 +50,7 @@ deterministic, security-bearing code this thesis contributes runs in **~90 ms** 
 — through the real agent graphs — and its authorization decision costs **~125 nanoseconds**;
 making provisioning trust-minimized
 adds **~69 ms** over a bare device write. The visible cost of an *agent market* is the LLM
-round-trips (~4.7 s) and, on a public chain, block confirmation — both **pluggable policy
+round-trips (~4.4 s) and, on a public chain, block confirmation — both **pluggable policy
 choices**, not properties of the design. **80/80 lifecycles completed with zero failures.**
 
 ## 4. Where the time goes (E1 — latency, n=20 per mode×service)
@@ -62,27 +62,27 @@ max was caught in audit and fixed).
 
 | phase | det/bandwidth | trust domain |
 |---|---:|---|
-| negotiate: admit + quote + decide | ~1 ms (det) · **4.09 s** (llm: quote 1.90 s + decide 2.14 s) | agents |
+| negotiate: admit + quote + decide | ~1 ms (det) · **3.70 s** (llm: quote 1.88 s + decide 1.89 s) | agents |
 | sign (EIP-712 + EIP-191) | ~6 ms | crypto |
 | settle (chain, instant-mine) | 33 ms | chain |
 | controller compute (+ chain reads, in-process API) | ~25 ms | controller |
-| actuate (gNMI → srl1) | 22 ms | network |
+| actuate (gNMI → srl1) | 20 ms | network |
 | graph + A2A-codec plumbing | ~2 ms | agents |
-| **end to end** (det, pooled n=40) | **89 ms** [72–143] | |
-| **end to end** (live LLM, n=40) | **4.66 s** [4.02–5.13] | |
+| **end to end** (det, pooled n=40) | **91 ms** [79–144] | |
+| **end to end** (live LLM, n=40) | **4.35 s** [3.72–4.69] | |
 
 Telemetry tracks bandwidth within a few milliseconds per shared phase — the "same machine,
 one translator" result (M6.3), quantified. **Both conditions run the same compiled
 graphs**: det swaps the two judgment slots for deterministic policies (list price; budget
 rule), so the det→llm delta *is* the full cost of the two judgment slots on this model,
 and that latency is a property of the model/deployment, not the architecture. Per service
-the LLM condition lands at 4.19 s (bandwidth) and 4.86 s (telemetry) — the telemetry
+the LLM condition lands at 3.85 s (bandwidth) and 4.45 s (telemetry) — the telemetry
 need's longer JSON gives both model calls more prompt to read; judgment sits above the
 invariance line by design. End-to-end is the consumer graph's **wall clock** (request →
 session active), not a sum of phase medians; the ~2 ms the inner clocks don't account for
 is reported as plumbing, not hidden.
 
-**Caveat (audit):** 89 ms is a **transport-free, in-process, instant-mine lower bound** on
+**Caveat (audit):** 91 ms is a **transport-free, in-process, instant-mine lower bound** on
 the protocol's compute. On a real deployment, add per-hop A2A/HTTP RTT and block time (§6b).
 
 ## 5. The authorization predicate costs ~125 nanoseconds (E7 — the sharpest number)
@@ -102,7 +102,7 @@ mismatch):
 
 **Claim it defends:** the security-critical judgment the thesis insists must be
 deterministic (rule 1) is *not a bottleneck by many orders of magnitude* — the whole
-authorization decision is ~125 ns, versus ~2 s for an LLM slot and tens of ms for chain
+authorization decision is ~110 ns, versus ~2 s for an LLM slot and tens of ms for chain
 and gNMI. This is the strongest data-backed form of "the architecture's own contribution is
 free"; it isolates the predicate from the chain-reads and gNMI that `activate_s` bundles.
 
@@ -113,19 +113,19 @@ device (config-committed sense, §2):
 
 - **Revocation lag** — on-chain `revoke` mined → policer gone from srl1, via the *real*
   polling watcher (`chainmcp` `watch_revoked` → `controller` `handle_revoked` → gNMI
-  delete): **440 ms median** pooled (n=80), range [169, 668] at poll = 0.5 s.
+  delete): **451 ms median** pooled (n=80), range [98, 638] at poll = 0.5 s.
 - **Expiry lag** — chain time passes `end_time` → the ExpiryTimer's tick tears down:
-  **75 ms median** [67, 80] (a single synchronous gNMI delete).
+  **74 ms median** [69, 82] (a single synchronous gNMI delete).
 
 **Revocation lag is poll-bounded, not fixed** (E9 sweep — this defuses "your number is just
 your polling choice"):
 
 | watcher poll | 0.1 s | 0.25 s | 0.5 s | 1.0 s | 2.0 s |
 |---|---:|---:|---:|---:|---:|
-| revocation lag (median) | 229 ms | 238 ms | 516 ms | 999 ms | 2005 ms |
+| revocation lag (median) | 233 ms | 228 ms | 511 ms | 990 ms | 1987 ms |
 
-The **poll interval sets the lag once it exceeds the machinery's own floor** (516/999/2005
-at 0.5/1/2 s); at the shortest polls the median flattens near **~230 ms** — event
+The **poll interval sets the lag once it exceeds the machinery's own floor** (511/990/1987
+at 0.5/1/2 s); at the shortest polls the median flattens near **~228 ms** — event
 detection, one gNMI teardown round-trip, and the harness's 50 ms readback cadence, which
 the poll can no longer hide. A *tunable operator SLO knob* (the poll) over a *mostly
 architectural minimum* (the floor). On a public chain, add event-visibility delay (block
@@ -223,7 +223,7 @@ measured on both sides.
 ## 9. The price of trustlessness (E6 — baseline)
 
 The same 50 Mbps path provisioned with **no agents, no chain, no controller** — one direct
-`netctl` call — takes **20 ms**. The full deterministic lifecycle takes 89 ms. So trust-
+`netctl` call — takes **20 ms**. The full deterministic lifecycle takes 91 ms. So trust-
 minimization adds **~69 ms**, which decomposes as: on-chain settle ~33 ms (instant-mine
 lower bound) + signing (offer + proof) ~6 ms + challenge + controller compute + chain reads
 + in-process API dispatch ~25 ms + graph/codec plumbing ~2 ms. **The authorization
@@ -269,7 +269,7 @@ model, one session; pricing judgment specifically was *not* demonstrated.
 |---|---|
 | n=20, single machine, one run, warm, sequential | medians of a low-variance mechanical pipeline; supports *order-of-magnitude* per-lifecycle cost, **not** tails or throughput/concurrency (never measured) |
 | Anvil instant-mine | chain latency is a lower bound; consensus latency is extrapolated (§6b), a property of the chosen chain |
-| in-process, co-located components | 89 ms excludes live A2A/HTTP hops: the A2A leg is the loopback codec, the controller API an in-process ASGI client; a transport-free lower bound on real code |
+| in-process, co-located components | 91 ms excludes live A2A/HTTP hops: the A2A leg is the loopback codec, the controller API an in-process ASGI client; a transport-free lower bound on real code |
 | ADR-006 datapath carve-out | "enforced" = config committed + read back, not packets shaped; datapath proof is the separate console iperf plateau |
 | adversarial = enumerated own-threat-model tests | every documented guard fires at its layer; fuzzing / reorg / economic adversaries untested |
 | LLM = one model, one session, single-sample | latency/accuracy attributed to this deployment; quote pricing is band-anchoring, not discovery |
@@ -279,13 +279,13 @@ model, one session; pricing judgment specifically was *not* demonstrated.
 
 The evaluation supports a **bounded** feasibility claim:
 
-1. A trust-minimized provisioning completes in **89 ms** (deterministic) / **4.7 s** (live
+1. A trust-minimized provisioning completes in **91 ms** (deterministic) / **4.4 s** (live
    LLM), request → enforced (config-committed) on a real router, **through the real agent
    graphs in both conditions**; **80/80 runs, 0 failures.**
-2. The **authorization predicate costs ~125 ns**; trust-minimization adds **~69 ms** over a
+2. The **authorization predicate costs ~110 ns**; trust-minimization adds **~72 ms** over a
    bare device write (settle + signatures + chain reads) — the security logic is free.
-3. On-chain revocation is enforced in **~440 ms** at a 0.5 s watcher poll, **tracking the
-   poll wherever it exceeds the ~230 ms floor** (a tunable SLO knob over a mostly
+3. On-chain revocation is enforced in **~451 ms** at a 0.5 s watcher poll, **tracking the
+   poll wherever it exceeds the ~228 ms floor** (a tunable SLO knob over a mostly
    architectural minimum) — the entitlement governs the wire.
 4. **13/14 threat-model probes rejected** at their designed layer (3 contract / 9
    controller / 1 provider admission), upstream of any device write; the one allowed case

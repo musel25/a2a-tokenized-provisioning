@@ -1,7 +1,7 @@
-{"exp": "predicate", "outcome": "allow", "ns_per_call": 124.72008500026277, "loops": 200000}
-{"exp": "predicate", "outcome": "E_NOT_OWNER", "ns_per_call": 59.5032349997382, "loops": 200000}
-{"exp": "predicate", "outcome": "E_NOT_STARTED", "ns_per_call": 60.42275500021788, "loops": 200000}
-{"exp": "predicate", "outcome": "E_EXPIRED", "ns_per_call": 71.45101500100282, "loops": 200000}
-{"exp": "predicate", "outcome": "E_REVOKED", "ns_per_call": 63.365859998612, "loops": 200000}
-{"exp": "predicate", "outcome": "E_SCOPE", "ns_per_call": 89.65777999947022, "loops": 200000}
-{"exp": "predicate", "outcome": "E_CONFLICT", "ns_per_call": 99.56059500154879, "loops": 200000}
+{"exp": "predicate", "outcome": "allow", "ns_per_call": 110.20661999282311, "loops": 200000}
+{"exp": "predicate", "outcome": "E_NOT_OWNER", "ns_per_call": 49.75326499334187, "loops": 200000}
+{"exp": "predicate", "outcome": "E_NOT_STARTED", "ns_per_call": 55.36792999919271, "loops": 200000}
+{"exp": "predicate", "outcome": "E_EXPIRED", "ns_per_call": 64.99958500171488, "loops": 200000}
+{"exp": "predicate", "outcome": "E_REVOKED", "ns_per_call": 72.70444999448955, "loops": 200000}
+{"exp": "predicate", "outcome": "E_SCOPE", "ns_per_call": 111.89073999958055, "loops": 200000}
+{"exp": "predicate", "outcome": "E_CONFLICT", "ns_per_call": 111.67060500156367, "loops": 200000}

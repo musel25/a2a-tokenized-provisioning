@@ -243,28 +243,39 @@ def _policer_names(prov: TimingProvisioner) -> set[str]:
     return names
 
 
-def _policer_attachments(prov: TimingProvisioner) -> set[str]:
-    """Which policer templates are actually ATTACHED to an interface.
-
-    `_policer_names` reads the template; this reads the binding that makes it act on
-    traffic. Both go down in one gNMI Set, so an ok result implies both landed — but
-    "committed and read back" should mean the thing that enforces was read back, not
-    just the thing that describes it."""
-    client = prov.inner._client("srl1")
-    got = client.get(path=["/qos/interfaces"], encoding="json_ietf", datatype="config")
-    names = set()
-    for update in got["notification"][0].get("update") or []:
-        for iface in _denamespace(update["val"] or {}).get("interface", []):
-            tmpl = (iface.get("input", {})
-                    .get("policer-templates", {}).get("policer-template"))
-            if tmpl:
-                names.add(tmpl)
-    return names
-
-
 def _bandwidth_names(prov: TimingProvisioner) -> set[str]:
-    """A bandwidth session counts as present only if template AND attachment are."""
-    return _policer_names(prov) & _policer_attachments(prov)
+    """A bandwidth session counts as present only if template AND attachment are.
+
+    `_policer_names` above reads the template, which merely *describes* a limit; the
+    attachment read here is the binding that makes an interface obey it. Both go down
+    in one gNMI Set, so an ok apply implies both landed — but "committed and read
+    back" should mean the node that enforces was read back, not just the one that
+    describes.
+
+    Both subtrees in ONE gNMI Get. This runs inside the revocation wait, which polls
+    every 50 ms, so a second request here doubles the campaign's gNMI rate — and SR
+    Linux meters that. Splitting it across two calls (as the template/attachment pair
+    was first written) exhausts the router's budget partway through the campaign and
+    fails the run with RESOURCE_EXHAUSTED.
+    """
+    client = prov.inner._client("srl1")
+    got = client.get(path=["/qos/policer-templates", "/qos/interfaces"],
+                     encoding="json_ietf", datatype="config")
+    templates: set[str] = set()
+    attached: set[str] = set()
+    # Walk every notification: the server is free to group two paths into one
+    # notification or return one apiece, and both shapes must parse the same.
+    for note in got.get("notification") or []:
+        for update in note.get("update") or []:
+            val = _denamespace(update["val"] or {})
+            for t in val.get("policer-template", []):
+                templates.add(t.get("name", ""))
+            for iface in val.get("interface", []):
+                tmpl = (iface.get("input", {})
+                        .get("policer-templates", {}).get("policer-template"))
+                if tmpl:
+                    attached.add(tmpl)
+    return templates & attached
 
 
 def _telemetry_names(prov: TimingProvisioner) -> set[str]:

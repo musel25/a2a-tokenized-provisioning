@@ -14,7 +14,13 @@ set / network-instance default type default
 set / network-instance default admin-state enable
 set / network-instance default interface ethernet-1/1.0
 set / network-instance default interface ethernet-1/2.0
-set / system grpc-server mgmt rate-limit 600
+# The evaluation campaign polls the router hard: the revocation wait re-reads config
+# every 50 ms across ~80 lifecycles, which bursts well past the 600/min this used to
+# allow and fails the run with RESOURCE_EXHAUSTED partway through. The limit protects
+# a production control plane from clients like that; here the polling client IS the
+# measuring instrument, so the lab lifts the ceiling instead of blunting the
+# measurement. Nothing in the paper's numbers depends on this value.
+set / system grpc-server mgmt rate-limit 65535
 
 # --- what a tunneled telemetry collector is allowed to reach (ADR-008) ---
 # A telemetry entitlement's tunnel binds its target to a gRPC server INSTANCE, and the

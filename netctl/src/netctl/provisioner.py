@@ -255,14 +255,21 @@ class GnmiProvisioner:
                     destinations.append(paths.telemetry_destination(name))
         return tunnels + destinations
 
-    def telemetry_config(self, device: str) -> list[dict]:
+    def telemetry_config(self, device: str, with_state: bool = False) -> list[dict]:
         """Every a2a telemetry export currently on the router (for the inspector) —
         read live off the device, like the policer readout.
 
         Each entry carries the destination's fields plus `tunnel`: whether the active
-        half exists, and what the router says its oper-state is. Reading the
-        destination alone would report a session as present that cannot export
-        anything (ADR-008), which is the readout that hid the gap in the first place.
+        half exists. Reading the destination alone would report a session as present
+        that cannot export anything (ADR-008), which is the readout that hid the gap
+        in the first place.
+
+        `with_state=True` adds the router's own `oper_state` for the tunnel, at the
+        cost of a SECOND gNMI request. Off by default because this function is called
+        from teardown-polling loops, and SR Linux budgets gNMI at 600/min — doubling
+        the reads there exhausts the budget mid-campaign. Callers that poll ask for
+        config only; the dashboard and the lab tests, which read occasionally, ask for
+        state. `oper_state` is None when it was not read.
         """
         client = self._client(device)
         cfg = client.get(
@@ -275,7 +282,7 @@ class GnmiProvisioner:
                 d for d in node.get("destination", []) if d.get("name", "").startswith("a2a-")
             ]
             tunnels |= {t.get("name") for t in node.get("tunnel", [])}
-        oper = self._tunnel_oper_states(client)
+        oper = self._tunnel_oper_states(client) if with_state else {}
         return [
             {**dest, "tunnel": dest["name"] in tunnels, "oper_state": oper.get(dest["name"])}
             for dest in destinations

@@ -103,7 +103,11 @@ def _await_tunnel(provisioner, session: str, want: str, timeout_s: float = 45.0)
     deadline = time.monotonic() + timeout_s
     state = None
     while time.monotonic() < deadline:
-        mine = [d for d in provisioner.telemetry_config("srl1") if d["name"] == f"a2a-{session}"]
+        mine = [
+            d
+            for d in provisioner.telemetry_config("srl1", with_state=True)
+            if d["name"] == f"a2a-{session}"
+        ]
         state = mine[0]["oper_state"] if mine else None
         if state == want:
             return state

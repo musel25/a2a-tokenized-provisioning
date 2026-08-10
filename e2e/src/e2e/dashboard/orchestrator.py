@@ -392,7 +392,7 @@ class Console:
         else:
             # the ticket authorized the controller to write telemetry-export config to the
             # router — read it back off srl1 as proof (symmetric with the policer)
-            dests = self.provisioner.telemetry_config("srl1")
+            dests = self.provisioner.telemetry_config("srl1", with_state=True)
             d = dests[0] if dests else {}
             # `oper` is the router's word, not ours (ADR-008). The tunnel only reaches
             # `up` against a collector that is actually listening, and the story's
