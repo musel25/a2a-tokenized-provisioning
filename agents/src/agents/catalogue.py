@@ -1,4 +1,4 @@
-"""The provider's product catalogue — per-service knowledge, quarantined (R6).
+"""The provider's product catalogue — per-service knowledge, quarantined (R12).
 
 The agent layer above this file is service-generic: the graphs do control flow, the
 ledger does arithmetic, the tools sign and settle — none of them knows what is sold.

@@ -160,7 +160,7 @@ QUOTE_SYSTEM = (
 
 def quote_user_message(need: ServiceNeed, list_price_tok: int) -> str:
     """The judgment slot's input: the per-service facts travel as data, so the system
-    prompt stays service-neutral (R6 reaches the prompt, not just the code)."""
+    prompt stays service-neutral (R12 reaches the prompt, not just the code)."""
     return f"LIST PRICE: {list_price_tok} TOK\nNEED: {need.model_dump_json()}"
 
 

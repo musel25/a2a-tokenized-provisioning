@@ -195,7 +195,7 @@ Nobody touched the router; the controller watched the chain and acted.
 
 The **trust relay** is the paper's Fig. 1 in motion: four stations — agents · chain ·
 controller · network — badged with the workflow's step numbers (1–2 / 3 / 4 / 5–6) and
-R1–R6 requirement chips (hover for the definition), because the honest story is *which
+R5/R6/R9–R12 requirement chips (hover for the definition), because the honest story is *which
 domain is trusted to have done what*. Below it, the event stream (A2A · MCP · chain, every
 tx hash a link when the explorer is up) and the device inspector reading srl1 live.
 

@@ -280,28 +280,28 @@
       <div class="station" data-d="agent" id="st-agent">
         <span class="badge">1–2 · judgment</span><div class="glyph">◆</div>
         <div class="name">Agents</div><div class="who">Ada · Bell — the only LLMs</div>
-        <div class="reqs"><span class="rq" title="R6 service invariance — what is sold enters the agent layer only through a catalogue row (demand, list price, params codec)">R6</span></div>
+        <div class="reqs"><span class="rq" title="R12 service invariance — what is sold enters the agent layer only through a catalogue row (demand, list price, params codec)">R12</span></div>
         <div class="state" id="stt-agent"><span class="sm">idle</span></div>
       </div>
       <div class="conn" id="c1"></div>
       <div class="station" data-d="chain" id="st-chain">
         <span class="badge">3 · settlement</span><div class="glyph">◈</div>
         <div class="name">Chain</div><div class="who">Anvil · ERC-721 entitlement</div>
-        <div class="reqs"><span class="rq" title="R1 atomic settlement — payment and entitlement move in one fulfill, or not at all">R1</span><span class="rq" title="R2 self-contained terms — what was bought lives in contract storage; even tokenURI is on-chain">R2</span></div>
+        <div class="reqs"><span class="rq" title="R5 atomic settlement — payment and entitlement move in one fulfill, or not at all">R5</span><span class="rq" title="R6 self-contained terms — what was bought lives in contract storage; even tokenURI is on-chain">R6</span></div>
         <div class="state" id="stt-chain"><span class="sm">idle</span></div>
       </div>
       <div class="conn" id="c2"></div>
       <div class="station" data-d="controller" id="st-controller">
         <span class="badge">4 · authority</span><div class="glyph">▚</div>
         <div class="name">Controller</div><div class="who">deterministic · no LLM</div>
-        <div class="reqs"><span class="rq" title="R3 deterministic authorization — challenge–response, then the six-check predicate over fresh chain facts">R3</span><span class="rq" title="R5 key confinement — the controller is built on a keyless chain reader; it could not sign even if instructed">R5</span></div>
+        <div class="reqs"><span class="rq" title="R10 deterministic authorization — challenge–response, then the six-check predicate over fresh chain facts">R10</span><span class="rq" title="R11 key confinement — the controller is built on a keyless chain reader; it could not sign even if instructed">R11</span></div>
         <div class="state" id="stt-controller"><span class="sm">idle</span></div>
       </div>
       <div class="conn" id="c3"></div>
       <div class="station" data-d="network" id="st-network">
         <span class="badge">5–6 · enforcement</span><div class="glyph">≋</div>
         <div class="name">Network</div><div class="who">SR Linux srl1 · gNMI</div>
-        <div class="reqs"><span class="rq" title="R4 unilateral termination — expiry and revocation deconfigure the device; teardown removes exactly what enforcement installed">R4</span><span class="rq" title="R6 service invariance — one translator per service is the only component that knows what was sold">R6</span></div>
+        <div class="reqs"><span class="rq" title="R9 unilateral termination — expiry and revocation deconfigure the device; teardown removes exactly what enforcement installed">R9</span><span class="rq" title="R12 service invariance — one translator per service is the only component that knows what was sold">R12</span></div>
         <div class="state" id="stt-network"><span class="sm">idle</span></div>
       </div>
     </div>

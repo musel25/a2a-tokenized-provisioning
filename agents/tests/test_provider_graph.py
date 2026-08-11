@@ -177,6 +177,6 @@ def test_telemetry_admission_reserves_a_real_slot():
 
 
 def test_quote_prompt_is_service_neutral():
-    # R6 reaches the prompt: what is sold arrives as data (the need + list price)
+    # R12 reaches the prompt: what is sold arrives as data (the need + list price)
     assert "bandwidth" not in QUOTE_SYSTEM.lower()
     assert "telemetry" not in QUOTE_SYSTEM.lower()

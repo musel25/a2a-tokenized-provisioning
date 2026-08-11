@@ -1,4 +1,4 @@
-"""The catalogue quarantines per-service knowledge (R6's agent-layer twin of
+"""The catalogue quarantines per-service knowledge (R12's agent-layer twin of
 controller/translators.py): demand extraction, list prices, resource ids, params
 codecs. Everything above it must be able to stay service-blind."""
 
