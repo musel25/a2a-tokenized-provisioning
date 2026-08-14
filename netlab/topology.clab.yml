@@ -17,7 +17,7 @@ topology:
   nodes:
     srl1:
       kind: nokia_srlinux
-      image: ghcr.io/nokia/srlinux:latest # ~2 GB RAM, allow ~1 min to boot
+      image: ghcr.io/nokia/srlinux:26.3.1 # pinned to the version the eval ran on (was :latest); ~2 GB RAM, allow ~1 min to boot
       # NOT `startup-config:` — its overlay mechanism breaks under sudoless (SUID)
       # containerlab ("/tmp/clab-overlay-config: No such file or directory").
       # Same effect, sturdier plumbing: mount the CLI file, replay it after boot.
